@@ -1,7 +1,6 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import {
-  ArchiveIcon,
   FileTextIcon,
   ListChecksIcon,
   RefreshCwIcon,
@@ -10,6 +9,7 @@ import {
 import { PageHeader } from "@/components/app/page-header"
 import { PageShell } from "@/components/app/page-shell"
 import { StatusBadge } from "@/components/app/status-badge"
+import { ArtifactBrowser } from "@/components/projects/artifact-browser"
 import { ProjectAssistant } from "@/components/projects/project-assistant"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -38,6 +38,7 @@ import {
   readProject,
   readProjectArtifacts,
 } from "@/lib/storage"
+import { getArtifactBrowserData } from "@/server/artifacts/project-artifacts"
 
 export const dynamic = "force-dynamic"
 
@@ -87,6 +88,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
   const artifacts = await readProjectArtifacts(project.id)
   const buildJob = await readBuildJob(project.id)
   const buildLogs = await readArtifactPreview(project.id, "logs/build_logs.jsonl")
+  const artifactBrowserData = await getArtifactBrowserData(project.id)
   const metricCards = [
     {
       label: "Sources",
@@ -603,40 +605,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         </TabsContent>
 
         <TabsContent value="Castform Export" className="flex flex-col gap-4">
-          <Alert>
-            <ArchiveIcon aria-hidden="true" />
-            <AlertTitle>Castform export note</AlertTitle>
-            <AlertDescription>
-              Castform export scaffolds are added in Wave 6. Current waves
-              verify corpus, import metadata, and dataset artifacts first.
-            </AlertDescription>
-          </Alert>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <PreviewBlock
-              title="domain_spec.json"
-              content={artifacts.domainSpecPreview}
-            />
-            <PreviewBlock
-              title="model_goal.json"
-              content={artifacts.modelGoalPreview}
-            />
-            <PreviewBlock
-              title="source_plan.json"
-              content={artifacts.sourcePlanPreview}
-            />
-            <PreviewBlock
-              title="training_plan.json"
-              content={artifacts.trainingPlanPreview}
-            />
-            <PreviewBlock
-              title="source_manifest.json"
-              content={artifacts.sourceManifestPreview}
-            />
-            <PreviewBlock
-              title="rewards/reward_spec.json"
-              content={artifacts.rewardSpecPreview}
-            />
-          </div>
+          <ArtifactBrowser projectId={project.id} data={artifactBrowserData} />
         </TabsContent>
 
         <TabsContent value="Logs" className="flex flex-col gap-4">
