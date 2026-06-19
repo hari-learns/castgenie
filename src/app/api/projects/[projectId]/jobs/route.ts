@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 
-import { readBuildJob, readBuildLogs, readProject } from "@/lib/storage"
+import { readBuildLogs } from "@/lib/storage"
+import { readLatestBuildProjectJob } from "@/server/jobs/queue"
+import { readProjectRecord } from "@/server/storage/repository"
 
 type JobsRouteContext = {
   params: Promise<{
@@ -10,14 +12,14 @@ type JobsRouteContext = {
 
 export async function GET(_request: Request, context: JobsRouteContext) {
   const { projectId } = await context.params
-  const project = await readProject(projectId)
+  const project = await readProjectRecord(projectId)
 
   if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 })
   }
 
   const [job, logs] = await Promise.all([
-    readBuildJob(projectId),
+    readLatestBuildProjectJob(projectId),
     readBuildLogs(projectId),
   ])
 

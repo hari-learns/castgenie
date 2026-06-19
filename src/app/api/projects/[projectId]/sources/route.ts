@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
-import { readProject, readProjectArtifacts, updateProject } from "@/lib/storage"
-import { maybeAutoLaunchCastformRun } from "@/server/castform/runs"
-import { runBuildJob } from "@/server/jobs/runner"
+import { readProjectArtifacts } from "@/lib/storage"
+import { enqueueBuildProjectJob } from "@/server/jobs/queue"
+import {
+  readProjectRecord,
+  updateProjectRecord,
+} from "@/server/storage/repository"
 import {
   defaultSourceConfig,
   parseUploadedDocuments,
@@ -27,7 +30,7 @@ const sourceFormSchema = z.object({
 
 export async function GET(_request: Request, { params }: RouteProps) {
   const { projectId } = await params
-  const project = await readProject(projectId)
+  const project = await readProjectRecord(projectId)
 
   if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 })
@@ -51,7 +54,7 @@ export async function GET(_request: Request, { params }: RouteProps) {
 
 export async function POST(request: Request, { params }: RouteProps) {
   const { projectId } = await params
-  const project = await readProject(projectId)
+  const project = await readProjectRecord(projectId)
 
   if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 })
@@ -128,10 +131,14 @@ export async function POST(request: Request, { params }: RouteProps) {
     )
   }
 
-  await updateProject(projectId, { sourceConfig: manifest.sourceConfig })
+  await updateProjectRecord(projectId, { sourceConfig: manifest.sourceConfig })
 
-  const build = parsed.data.rebuild ? await runBuildJob(projectId) : null
-  const castformRun = build ? await maybeAutoLaunchCastformRun(projectId) : null
+  const job = parsed.data.rebuild
+    ? await enqueueBuildProjectJob(projectId, {
+        source: "sources_update",
+        uploadedFileCount: files.length,
+      })
+    : null
   const [parsedUploads, artifacts] = await Promise.all([
     parseUploadedDocuments(projectId),
     readProjectArtifacts(projectId),
@@ -139,9 +146,8 @@ export async function POST(request: Request, { params }: RouteProps) {
 
   return NextResponse.json({
     projectId,
-    jobId: build?.jobId,
-    castformRunId: castformRun?.id,
-    status: build?.project.status ?? project.status,
+    jobId: job?.id,
+    status: job ? "queued" : project.status,
     uploadManifest: manifest,
     uploadParseReport: parsedUploads.report,
     webSearchPlan: artifacts.webSearchPlan,

@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server"
 
-import { readProject } from "@/lib/storage"
-import { maybeAutoLaunchCastformRun } from "@/server/castform/runs"
-import { runBuildJob } from "@/server/jobs/runner"
+import { enqueueBuildProjectJob } from "@/server/jobs/queue"
+import { readProjectRecord } from "@/server/storage/repository"
 
 type BuildRouteContext = {
   params: Promise<{
@@ -12,19 +11,19 @@ type BuildRouteContext = {
 
 export async function POST(_request: Request, context: BuildRouteContext) {
   const { projectId } = await context.params
-  const project = await readProject(projectId)
+  const project = await readProjectRecord(projectId)
 
   if (!project) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 })
   }
 
-  const build = await runBuildJob(projectId)
-  const castformRun = await maybeAutoLaunchCastformRun(projectId)
+  const job = await enqueueBuildProjectJob(projectId, {
+    source: "manual_rebuild",
+  })
 
   return NextResponse.json({
     projectId,
-    jobId: build.jobId,
-    castformRunId: castformRun?.id,
-    status: build.project.status,
+    jobId: job.id,
+    status: "queued",
   })
 }

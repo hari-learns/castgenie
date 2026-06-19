@@ -14,7 +14,8 @@ The product thesis is simple: a user describes the expert assistant or model wor
 - Wave 8: automatic web discovery with mock-first Exa/Firecrawl provider adapters.
 - Wave 9: Castform readiness checks, mock training runs, model versions, and opt-in Python launcher.
 - Wave 10-14: local demo hardening, simple workspace UX, and first corrective Castform hosted-model routing.
-- Wave 15-19: planned corrective path for Supabase-backed jobs, real Castform RAG project generation, launch monitoring, hosted model chat, and end-to-end demo hardening. See `docs/wave-15-19-plan.md`.
+- Wave 15: Supabase-backed metadata, durable build jobs, and local worker runtime.
+- Wave 16-19: planned corrective path for real Castform RAG project generation, launch monitoring, hosted model chat, and end-to-end demo hardening. See `docs/wave-15-19-plan.md`.
 
 Current behavior still includes local preview infrastructure. The intended product path is real-source ingestion, Castform RAG training, and hosted-model chat.
 
@@ -27,12 +28,43 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+In Supabase mode, run the worker in a second terminal:
+
+```bash
+pnpm worker
+```
+
+To process one queued job and exit:
+
+```bash
+pnpm worker:once
+```
+
 Before committing a wave, run:
 
 ```bash
 pnpm lint
 pnpm test
 pnpm build
+```
+
+## Supabase Setup
+
+Wave 15 stores durable project metadata and job state in Supabase while keeping large artifacts under local `storage/projects/<projectId>`.
+
+Apply the migration before using `CASTGENIE_STORAGE_MODE=supabase`:
+
+```text
+supabase/migrations/202606190001_wave15_core.sql
+```
+
+For dashboard setup, open the Supabase SQL editor for the project, paste the migration, and run it once. Service-role REST credentials cannot create tables or functions; they can only use the schema after it exists.
+
+After applying the migration, verify:
+
+```bash
+pnpm supabase:smoke
+pnpm worker:once
 ```
 
 ## Environment
@@ -87,7 +119,7 @@ Use this 90-second local demo flow:
 - Confirm normal chat remains locked until a hosted Castform model version exists.
 - Confirm real Castform launch remains disabled or blocked without env configuration and source readiness.
 
-## Local Storage
+## Storage
 
 Generated project data is written under:
 

@@ -7,9 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "supabase:smoke": "tsx -r tsconfig-paths/register scripts/supabase-smoke.ts",
+    "worker": "tsx -r tsconfig-paths/register scripts/castgenie-worker.ts",
+    "worker:once": "tsx -r tsconfig-paths/register scripts/castgenie-worker.ts --once"
   },
   "dependencies": {
+    "@next/env": "^16.2.9",
+    "@supabase/supabase-js": "^2.108.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
@@ -34,6 +39,8 @@
     "eslint-config-next": "16.2.9",
     "playwright": "^1.61.0",
     "tailwindcss": "^4",
+    "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.22.4",
     "typescript": "^5",
     "vitest": "^4.1.9"
   }

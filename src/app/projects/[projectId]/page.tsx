@@ -37,11 +37,12 @@ import {
 import {
   readArtifactPreview,
   readBuildJob,
-  readProject,
   readProjectArtifacts,
 } from "@/lib/storage"
 import { getArtifactBrowserData } from "@/server/artifacts/project-artifacts"
 import { getCastformState } from "@/server/castform/runs"
+import { readLatestBuildProjectJob } from "@/server/jobs/queue"
+import { readProjectRecord } from "@/server/storage/repository"
 
 export const dynamic = "force-dynamic"
 
@@ -130,14 +131,14 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
   const activeSection = isProjectSection(requestedSection)
     ? requestedSection
     : "workspace"
-  const project = await readProject(projectId)
+  const project = await readProjectRecord(projectId)
 
   if (!project) {
     notFound()
   }
 
   const artifacts = await readProjectArtifacts(project.id)
-  const buildJob = await readBuildJob(project.id)
+  const buildJob = (await readLatestBuildProjectJob(project.id)) ?? (await readBuildJob(project.id))
   const buildLogs = await readArtifactPreview(project.id, "logs/build_logs.jsonl")
   const castformState = await getCastformState(project.id)
   const hostedModel = castformState?.modelVersions.find(
@@ -529,7 +530,7 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
               <CardHeader>
                 <CardTitle>Job state</CardTitle>
                 <CardDescription>
-                  Synchronous today, queue-shaped for later Postgres/worker use.
+                  Durable job state processed by the local CastGenie worker.
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col gap-3 text-sm">

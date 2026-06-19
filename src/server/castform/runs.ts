@@ -6,11 +6,16 @@ import { projectArtifactPath } from "@/lib/paths"
 import {
   appendArtifactJsonl,
   readJson,
-  readProject,
   readProjectArtifacts,
   readTextIfExists,
   writeArtifactJson,
 } from "@/lib/storage"
+import {
+  appendSupabaseTrainingEvent,
+  replaceSupabaseModelVersions,
+  upsertSupabaseCastformRun,
+} from "@/server/supabase/repository"
+import { readProjectRecord } from "@/server/storage/repository"
 import type { SourceRecord } from "@/types/artifacts"
 import type {
   CastformProviderLog,
@@ -98,6 +103,7 @@ async function readRuns(projectId: string) {
 
 async function appendRun(run: CastformRun) {
   await appendArtifactJsonl(run.projectId, "castform/runs.jsonl", [run])
+  await upsertSupabaseCastformRun(run)
 }
 
 async function readModelVersions(projectId: string) {
@@ -110,6 +116,7 @@ async function readModelVersions(projectId: string) {
 
 async function writeModelVersions(projectId: string, versions: ModelVersion[]) {
   await writeArtifactJson(projectId, "model_versions.json", versions)
+  await replaceSupabaseModelVersions(projectId, versions)
 }
 
 function realConfig() {
@@ -379,7 +386,7 @@ async function callPythonRunner(projectId: string, operation: "launch" | "status
 }
 
 export async function getCastformState(projectId: string): Promise<CastformRunsResponse | null> {
-  const project = await readProject(projectId)
+  const project = await readProjectRecord(projectId)
 
   if (!project) {
     return null
@@ -404,7 +411,7 @@ export async function getCastformState(projectId: string): Promise<CastformRunsR
 }
 
 export async function createCastformRun(projectId: string, mode: CastformRunMode) {
-  const project = await readProject(projectId)
+  const project = await readProjectRecord(projectId)
 
   if (!project) {
     return null
@@ -449,6 +456,13 @@ export async function createCastformRun(projectId: string, mode: CastformRunMode
         status: "blocked",
         message: blockedRun.error,
       })
+      await appendSupabaseTrainingEvent({
+        projectId,
+        runId: blockedRun.id,
+        level: "warn",
+        eventType: "castform_run_blocked",
+        message: blockedRun.error,
+      })
       return blockedRun
     }
 
@@ -475,6 +489,16 @@ export async function createCastformRun(projectId: string, mode: CastformRunMode
         status: result.status === "failed" ? "failed" : "success",
         message: result.error ?? `Real Castform run created with status ${result.status}.`,
       })
+      await appendSupabaseTrainingEvent({
+        projectId,
+        runId: realRun.id,
+        eventType: "castform_run_created",
+        message: result.error ?? `Real Castform run created with status ${result.status}.`,
+        payload: {
+          castformRunId: realRun.castformRunId,
+          statusUrl: realRun.statusUrl,
+        },
+      })
       return realRun
     } catch (error) {
       const failedRun: CastformRun = {
@@ -492,6 +516,13 @@ export async function createCastformRun(projectId: string, mode: CastformRunMode
         status: "failed",
         message: failedRun.error ?? "Unknown Castform launch error.",
       })
+      await appendSupabaseTrainingEvent({
+        projectId,
+        runId: failedRun.id,
+        level: "error",
+        eventType: "castform_run_failed",
+        message: failedRun.error ?? "Unknown Castform launch error.",
+      })
       return failedRun
     }
   }
@@ -503,6 +534,12 @@ export async function createCastformRun(projectId: string, mode: CastformRunMode
     mode,
     operation: "create_run",
     status: "success",
+    message: "Mock Castform run queued.",
+  })
+  await appendSupabaseTrainingEvent({
+    projectId,
+    runId: run.id,
+    eventType: "castform_mock_run_created",
     message: "Mock Castform run queued.",
   })
   return run

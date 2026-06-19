@@ -34,7 +34,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { workflowCards } from "@/lib/mock-data"
-import { listProjects } from "@/lib/storage"
+import { listProjectRecords } from "@/server/storage/repository"
 
 export const dynamic = "force-dynamic"
 
@@ -47,7 +47,7 @@ function formatDate(value: string) {
 }
 
 export default async function Home() {
-  const projects = await listProjects()
+  const projects = await listProjectRecords()
 
   return (
     <PageShell>
@@ -113,7 +113,7 @@ export default async function Home() {
           <CardHeader>
             <CardTitle>Recent workspaces</CardTitle>
             <CardDescription>
-              Workspaces are loaded from local JSON files in storage.
+              Workspaces are loaded from durable project metadata.
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -110,6 +110,11 @@ type GeneratedBundle = {
   castformFiles: Array<{ path: string; content: string }>
 }
 
+type RunBuildJobOptions = {
+  jobId?: string
+  onJobUpdate?: (job: BuildJob) => Promise<void>
+}
+
 function now() {
   return new Date().toISOString()
 }
@@ -119,6 +124,7 @@ async function markStep(
   step: (typeof stepDefinitions)[number],
   status: "started" | "complete" | "failed",
   progress: number,
+  onJobUpdate?: (job: BuildJob) => Promise<void>,
   error?: string
 ) {
   const timestamp = now()
@@ -130,25 +136,28 @@ async function markStep(
     status,
     message: error ?? step.description,
   })
-  await writeBuildJob({
+  const nextJob = {
     ...job,
     status: status === "failed" ? "failed" : "running",
     currentStep: step.id,
     progress,
     updatedAt: timestamp,
     error,
-  })
+  } satisfies BuildJob
+  await writeBuildJob(nextJob)
+  await onJobUpdate?.(nextJob)
+  return nextJob
 }
 
-export async function runBuildJob(projectId: string) {
+export async function runBuildJob(projectId: string, options: RunBuildJobOptions = {}) {
   const project = await readProject(projectId)
 
   if (!project) {
     throw new Error(`Project ${projectId} not found`)
   }
 
-  const job: BuildJob = {
-    id: `job_${nanoid(10)}`,
+  let job: BuildJob = {
+    id: options.jobId ?? `job_${nanoid(10)}`,
     projectId,
     status: "running",
     currentStep: stepDefinitions[0]?.id,
@@ -157,6 +166,7 @@ export async function runBuildJob(projectId: string) {
     updatedAt: now(),
   }
   await writeBuildJob(job)
+  await options.onJobUpdate?.(job)
 
   try {
     const plan = planProject({ projectId, prompt: project.prompt })
@@ -165,7 +175,13 @@ export async function runBuildJob(projectId: string) {
 
     for (const [index, step] of stepDefinitions.entries()) {
       const startedAt = now()
-      await markStep(job, step, "started", Math.round((index / stepDefinitions.length) * 100))
+      job = await markStep(
+        job,
+        step,
+        "started",
+        Math.round((index / stepDefinitions.length) * 100),
+        options.onJobUpdate
+      )
       await writeProject({
         ...project,
         status: step.status,
@@ -181,11 +197,12 @@ export async function runBuildJob(projectId: string) {
           },
         ],
       })
-      await markStep(
+      job = await markStep(
         job,
         step,
         "complete",
-        Math.round(((index + 1) / stepDefinitions.length) * 100)
+        Math.round(((index + 1) / stepDefinitions.length) * 100),
+        options.onJobUpdate
       )
       steps.push({
         id: step.id,
@@ -248,19 +265,28 @@ export async function runBuildJob(projectId: string) {
     }
 
     await writeProject(nextProject)
-    await writeBuildJob({
+    const completeJob = {
       ...job,
       status: "complete",
       currentStep: "ready",
       progress: 100,
       updatedAt: now(),
-    })
+    } satisfies BuildJob
+    await writeBuildJob(completeJob)
+    await options.onJobUpdate?.(completeJob)
 
     return { project: nextProject, jobId: job.id }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown build failure"
     const failedStep = stepDefinitions.find((step) => step.id === job.currentStep) ?? stepDefinitions[0]
-    await markStep(job, failedStep, "failed", job.progress, message)
+    job = await markStep(
+      job,
+      failedStep,
+      "failed",
+      job.progress,
+      options.onJobUpdate,
+      message
+    )
     await writeProject({
       ...project,
       status: "failed",

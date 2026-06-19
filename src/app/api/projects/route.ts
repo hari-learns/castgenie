@@ -2,9 +2,12 @@ import { NextResponse } from "next/server"
 import { nanoid } from "nanoid"
 import { z } from "zod"
 
-import { createProject, listProjects, updateProject } from "@/lib/storage"
-import { maybeAutoLaunchCastformRun } from "@/server/castform/runs"
-import { runBuildJob } from "@/server/jobs/runner"
+import { enqueueBuildProjectJob } from "@/server/jobs/queue"
+import {
+  createProjectRecord,
+  listProjectRecords,
+  updateProjectRecord,
+} from "@/server/storage/repository"
 import {
   defaultSourceConfig,
   persistUploadedSources,
@@ -44,7 +47,7 @@ function defaultName(prompt: string) {
 }
 
 export async function GET() {
-  const projects = await listProjects()
+  const projects = await listProjectRecords()
   return NextResponse.json({ projects })
 }
 
@@ -100,7 +103,7 @@ export async function POST(request: Request) {
           ? files.length === 0
           : parsed.data.allowWebDiscovery,
     })
-    const project = await createProject({
+    const project = await createProjectRecord({
       id: projectId,
       name: parsed.data.name || defaultName(prompt),
       prompt,
@@ -120,7 +123,7 @@ export async function POST(request: Request) {
             allowWebDiscovery: sourceConfig.allowWebDiscovery,
           },
         })
-        await updateProject(project.id, { sourceConfig: manifest.sourceConfig })
+        await updateProjectRecord(project.id, { sourceConfig: manifest.sourceConfig })
       } catch (error) {
         return NextResponse.json(
           {
@@ -134,13 +137,14 @@ export async function POST(request: Request) {
       }
     }
 
-    const build = await runBuildJob(project.id)
-    const castformRun = await maybeAutoLaunchCastformRun(project.id)
+    const job = await enqueueBuildProjectJob(project.id, {
+      source: "create_project",
+      hasUploads: files.length > 0,
+    })
 
     return NextResponse.json({
       projectId: project.id,
-      jobId: build.jobId,
-      castformRunId: castformRun?.id,
+      jobId: job.id,
       redirectTo: `/projects/${project.id}`,
     })
   }
@@ -160,7 +164,7 @@ export async function POST(request: Request) {
 
   const projectId = nanoid(10)
   const prompt = parsed.data.prompt
-  const project = await createProject({
+  const project = await createProjectRecord({
     id: projectId,
     name: parsed.data.name || defaultName(prompt),
     prompt,
@@ -172,13 +176,14 @@ export async function POST(request: Request) {
       allowWebDiscovery: parsed.data.allowWebDiscovery ?? true,
     }),
   })
-  const build = await runBuildJob(project.id)
-  const castformRun = await maybeAutoLaunchCastformRun(project.id)
+  const job = await enqueueBuildProjectJob(project.id, {
+    source: "create_project",
+    hasUploads: false,
+  })
 
   return NextResponse.json({
     projectId: project.id,
-    jobId: build.jobId,
-    castformRunId: castformRun?.id,
+    jobId: job.id,
     redirectTo: `/projects/${project.id}`,
   })
 }
