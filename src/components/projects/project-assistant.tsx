@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, type FormEvent } from "react"
+import { useMemo, useState, type FormEvent, type ReactNode } from "react"
 import {
   CheckIcon,
   CopyIcon,
@@ -62,6 +62,9 @@ type ProjectAssistantProps = {
   projectId: string
   actions: ActionTemplate[]
   suggestedPrompt: string
+  disabled?: boolean
+  disabledReason?: string
+  contextSlot?: ReactNode
 }
 
 function providerLabel(provider?: ProviderName) {
@@ -88,6 +91,9 @@ export function ProjectAssistant({
   projectId,
   actions,
   suggestedPrompt,
+  disabled = false,
+  disabledReason = "This model is not ready yet.",
+  contextSlot,
 }: ProjectAssistantProps) {
   const [messages, setMessages] = useState<LocalMessage[]>([])
   const [message, setMessage] = useState(suggestedPrompt)
@@ -125,6 +131,9 @@ export function ProjectAssistant({
 
   async function onChatSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (disabled) {
+      return
+    }
     const trimmed = message.trim()
 
     if (!trimmed || isSending) {
@@ -174,6 +183,10 @@ export function ProjectAssistant({
   }
 
   async function runAction(action: ActionTemplate) {
+    if (disabled) {
+      return
+    }
+
     setActionError(null)
     setRunningActionId(action.id)
 
@@ -262,7 +275,8 @@ ${citations}
   }
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[1fr_24rem]">
+    <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)_24rem]">
+      {contextSlot}
       <Card>
         <CardHeader>
           <CardTitle>Ask this model</CardTitle>
@@ -271,6 +285,13 @@ ${citations}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
+          {disabled ? (
+            <Alert>
+              <AlertTitle>Model not ready yet</AlertTitle>
+              <AlertDescription>{disabledReason}</AlertDescription>
+            </Alert>
+          ) : null}
+
           {chatError ? (
             <Alert variant="destructive">
               <AlertTitle>Chat failed</AlertTitle>
@@ -346,10 +367,15 @@ ${citations}
               value={message}
               onChange={(event) => setMessage(event.target.value)}
               className="min-h-24"
-              placeholder="Ask the model a question"
+              disabled={disabled}
+              placeholder={
+                disabled
+                  ? "Chat unlocks when the model is ready"
+                  : "Ask the model a question"
+              }
             />
             <div className="flex justify-end">
-              <Button type="submit" disabled={isSending}>
+              <Button type="submit" disabled={disabled || isSending}>
                 {isSending ? (
                   <Loader2Icon className="animate-spin" aria-hidden="true" />
                 ) : (
@@ -378,6 +404,7 @@ ${citations}
                 value={actionTopic}
                 onChange={(event) => setActionTopic(event.target.value)}
                 placeholder="Advanced Accounting paper"
+                disabled={disabled}
               />
             </div>
             {actionError ? (
@@ -404,7 +431,7 @@ ${citations}
                     type="button"
                     className="mt-3 w-full"
                     variant="outline"
-                    disabled={Boolean(runningActionId)}
+                    disabled={disabled || Boolean(runningActionId)}
                     onClick={() => runAction(action)}
                   >
                     {runningActionId === action.id ? (

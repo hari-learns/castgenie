@@ -13,6 +13,7 @@ import {
 
 import { PageHeader } from "@/components/app/page-header"
 import { PageShell } from "@/components/app/page-shell"
+import type { SidebarSectionLink } from "@/components/app/app-sidebar"
 import { StatusBadge } from "@/components/app/status-badge"
 import { ArtifactBrowser } from "@/components/projects/artifact-browser"
 import { CastformRunsPanel } from "@/components/projects/castform-runs-panel"
@@ -118,46 +119,6 @@ function PreviewBlock({
   )
 }
 
-function ProjectSectionNav({
-  projectId,
-  activeSection,
-}: {
-  projectId: string
-  activeSection: ProjectSection
-}) {
-  return (
-    <nav
-      aria-label="Project sections"
-      className="flex gap-2 overflow-x-auto rounded-lg border border-border bg-card p-2 lg:sticky lg:top-8 lg:flex-col lg:overflow-visible"
-    >
-      {projectSections.map((section) => (
-        <Button
-          key={section.id}
-          variant={activeSection === section.id ? "secondary" : "ghost"}
-          className="h-auto min-w-40 justify-start gap-3 px-3 py-3 lg:min-w-0"
-          asChild
-        >
-          <Link
-            href={
-              section.id === "workspace"
-                ? `/projects/${projectId}`
-                : `/projects/${projectId}?section=${section.id}`
-            }
-          >
-            <section.icon aria-hidden="true" />
-            <span className="flex min-w-0 flex-col items-start">
-              <span className="text-sm font-medium">{section.label}</span>
-              <span className="text-xs text-muted-foreground">
-                {section.description}
-              </span>
-            </span>
-          </Link>
-        </Button>
-      ))}
-    </nav>
-  )
-}
-
 function isProjectSection(value: string | undefined): value is ProjectSection {
   return projectSections.some((section) => section.id === value)
 }
@@ -179,6 +140,16 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
   const buildLogs = await readArtifactPreview(project.id, "logs/build_logs.jsonl")
   const castformState = await getCastformState(project.id)
   const artifactBrowserData = await getArtifactBrowserData(project.id)
+  const sidebarSectionLinks: SidebarSectionLink[] = projectSections.map((section) => ({
+    title: section.label,
+    description: section.description,
+    href:
+      section.id === "workspace"
+        ? `/projects/${project.id}`
+        : `/projects/${project.id}?section=${section.id}`,
+    icon: section.icon,
+    active: activeSection === section.id,
+  }))
   const metricCards = [
     {
       label: "Sources",
@@ -213,7 +184,10 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
   ]
 
   return (
-    <PageShell>
+    <PageShell
+      sidebarSectionTitle={project.name}
+      sidebarSectionLinks={sidebarSectionLinks}
+    >
       <PageHeader
         title={project.name}
         description={project.prompt}
@@ -227,65 +201,62 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
         }
       />
 
-      <div className="grid min-w-0 gap-5 lg:grid-cols-[16rem_minmax(0,1fr)]">
-        <ProjectSectionNav
-          projectId={project.id}
-          activeSection={activeSection}
-        />
-
-        <div className="min-w-0">
+      <div className="min-w-0">
           {activeSection === "workspace" ? (
             <section className="flex flex-col gap-4">
-              <Card>
-                <CardHeader>
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                    <div>
-                      <CardTitle>What you asked CastGenie to build</CardTitle>
-                      <CardDescription>
-                        This is the model workspace CastGenie prepared from your
-                        request.
-                      </CardDescription>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <StatusBadge status={project.status} />
-                      <Button variant="outline" asChild>
-                        <Link href="/projects/new">New workspace</Link>
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="grid gap-4 lg:grid-cols-[1fr_18rem]">
-                  <div className="rounded-lg border border-border bg-muted/30 p-4">
-                    <p className="whitespace-pre-wrap text-sm leading-6">
-                      {project.prompt}
-                    </p>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-                    <div className="rounded-lg border border-border p-3">
-                      <p className="text-xs text-muted-foreground">Sources</p>
-                      <p className="mt-1 text-2xl font-semibold">
-                        {project.metrics.sources}
-                      </p>
-                    </div>
-                    <div className="rounded-lg border border-border p-3">
-                      <p className="text-xs text-muted-foreground">Documents</p>
-                      <p className="mt-1 text-2xl font-semibold">
-                        {project.metrics.documents}
-                      </p>
-                    </div>
-                    <div className="rounded-lg border border-border p-3">
-                      <p className="text-xs text-muted-foreground">Workflows</p>
-                      <p className="mt-1 text-2xl font-semibold">
-                        {artifacts.modelGoal?.generatedActions.length ?? 0}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
               <ProjectAssistant
                 projectId={project.id}
                 actions={artifacts.modelGoal?.generatedActions ?? []}
+                disabled={project.status !== "ready" && project.status !== "model_ready"}
+                disabledReason="The model workspace is still being prepared. Chat and workflows unlock when the project is ready."
+                contextSlot={
+                  <Card>
+                    <CardHeader>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <CardTitle>What you asked CastGenie to build</CardTitle>
+                          <CardDescription>
+                            This is the model workspace CastGenie prepared from your
+                            request.
+                          </CardDescription>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <StatusBadge status={project.status} />
+                          <Button variant="outline" asChild>
+                            <Link href="/projects/new">New workspace</Link>
+                          </Button>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="flex flex-col gap-4">
+                      <div className="rounded-lg border border-border bg-muted/30 p-4">
+                        <p className="whitespace-pre-wrap text-sm leading-6">
+                          {project.prompt}
+                        </p>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-lg border border-border p-3">
+                          <p className="text-xs text-muted-foreground">Sources</p>
+                          <p className="mt-1 text-2xl font-semibold">
+                            {project.metrics.sources}
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-border p-3">
+                          <p className="text-xs text-muted-foreground">Documents</p>
+                          <p className="mt-1 text-2xl font-semibold">
+                            {project.metrics.documents}
+                          </p>
+                        </div>
+                        <div className="rounded-lg border border-border p-3">
+                          <p className="text-xs text-muted-foreground">Workflows</p>
+                          <p className="mt-1 text-2xl font-semibold">
+                            {artifacts.modelGoal?.generatedActions.length ?? 0}
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                }
                 suggestedPrompt={
                   project.domainSpec?.domain === "OWASP code security"
                     ? "Explain how to review for broken access control with citations."
@@ -786,7 +757,6 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
           <PreviewBlock title="logs/build_logs.jsonl" content={buildLogs.content} />
             </section>
           ) : null}
-        </div>
       </div>
     </PageShell>
   )
