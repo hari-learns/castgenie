@@ -176,8 +176,8 @@ export function ArtifactBrowser({ projectId, data }: ArtifactBrowserProps) {
         <ArchiveIcon aria-hidden="true" />
         <AlertTitle>Castform export note</AlertTitle>
         <AlertDescription>
-          This is a scaffold for inspection and handoff. Review source permissions
-          before any real training run.
+          This is a generated RAG project for Castform validation and launch.
+          Review source permissions before any real training run.
         </AlertDescription>
       </Alert>
 
@@ -247,20 +247,27 @@ export function ArtifactBrowser({ projectId, data }: ArtifactBrowserProps) {
         <CardHeader>
           <CardTitle>Export coverage</CardTitle>
           <CardDescription>
-            Required Wave 6 files and scaffolds.
+            Required Castform RAG project files.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {[
             "castform_project/README.md",
             "castform_project/config.yaml",
+            "castform_project/run.py",
+            "castform_project/train_dataset.jsonl",
+            "castform_project/eval_dataset.jsonl",
+            "castform_project/data/corpus_manifest.json",
+            "castform_project/rag_readiness.json",
             "castform_project/data/chunks.jsonl",
             "castform_project/data/train_qa.jsonl",
             "castform_project/data/eval_qa.jsonl",
             "castform_project/data/action_tasks.jsonl",
             "castform_project/rewards/reward_spec.json",
+            "castform_project/src/env.py",
+            "castform_project/src/dataset.py",
+            "castform_project/src/tools.py",
             "castform_project/src/train.py",
-            "castform_project/src/environment.py",
             "castform_project/src/rewards.py",
           ].map((path) => {
             const exists = data.files.some((file) => file.path === path)

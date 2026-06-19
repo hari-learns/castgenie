@@ -37,20 +37,26 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
 
 def require_workspace(workspace: Path) -> dict[str, Path]:
     config = workspace / "config.yaml"
+    run_py = workspace / "run.py"
     chunks = workspace / "data" / "chunks.jsonl"
-    train_qa = workspace / "data" / "train_qa.jsonl"
-    eval_qa = workspace / "data" / "eval_qa.jsonl"
+    corpus_manifest = workspace / "data" / "corpus_manifest.json"
+    train_dataset = workspace / "train_dataset.jsonl"
+    eval_dataset = workspace / "eval_dataset.jsonl"
+    rag_readiness = workspace / "rag_readiness.json"
     reward_spec = workspace / "rewards" / "reward_spec.json"
 
-    for path in [config, chunks, train_qa, eval_qa, reward_spec]:
+    for path in [config, run_py, chunks, corpus_manifest, train_dataset, eval_dataset, rag_readiness, reward_spec]:
         if not path.exists():
             raise RuntimeError(f"Required Castform artifact is missing: {path.relative_to(workspace)}")
 
     return {
         "config": config,
+        "run_py": run_py,
         "chunks": chunks,
-        "train_qa": train_qa,
-        "eval_qa": eval_qa,
+        "corpus_manifest": corpus_manifest,
+        "train_dataset": train_dataset,
+        "eval_dataset": eval_dataset,
+        "rag_readiness": rag_readiness,
         "reward_spec": reward_spec,
     }
 
@@ -59,7 +65,7 @@ def normalize_dataset(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
     for row in rows:
         prompt = row.get("question") or row.get("prompt")
-        ground_truth = row.get("expectedAnswer") or row.get("ground_truth") or row.get("answer")
+        ground_truth = row.get("answer") or row.get("expectedAnswer") or row.get("ground_truth")
         if not prompt or not ground_truth:
             continue
         normalized.append(
@@ -69,6 +75,7 @@ def normalize_dataset(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "metadata": {
                     "id": row.get("id"),
                     "topic": row.get("topic"),
+                    "reference_chunks": row.get("reference_chunks", []),
                     "sourceIds": row.get("sourceIds", []),
                     "chunkIds": row.get("chunkIds", []),
                     "difficulty": row.get("difficulty"),
@@ -140,8 +147,8 @@ def launch(args: argparse.Namespace) -> None:
         raise RuntimeError("CASTFORM_API_KEY is not configured")
     _BaseEnv, TrainerClient, upload_training_run = import_benchmax()
     env_class = make_env_class()
-    train_data = normalize_dataset(read_jsonl(paths["train_qa"]))
-    eval_data = normalize_dataset(read_jsonl(paths["eval_qa"]))
+    train_data = normalize_dataset(read_jsonl(paths["train_dataset"]))
+    eval_data = normalize_dataset(read_jsonl(paths["eval_dataset"]))
     run_name = f"castgenie-{Path(args.project_root).name}"
     upload_kwargs: dict[str, Any] = {
         "env_class": env_class,

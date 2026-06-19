@@ -32,9 +32,14 @@ const castformArtifactPaths = {
   chunks: "chunks.jsonl",
   trainQa: "datasets/train_qa.jsonl",
   evalQa: "datasets/eval_qa.jsonl",
+  castformRun: "castform_project/run.py",
+  castformTrainDataset: "castform_project/train_dataset.jsonl",
+  castformEvalDataset: "castform_project/eval_dataset.jsonl",
+  castformRagReadiness: "castform_project/rag_readiness.json",
   actionTasks: "datasets/action_tasks.jsonl",
   rewardSpec: "rewards/reward_spec.json",
 }
+const launchDeferredForWave16 = true
 
 function now() {
   return new Date().toISOString()
@@ -42,6 +47,22 @@ function now() {
 
 function parseJsonlCount(content: string) {
   return content.split("\n").filter(Boolean).length
+}
+
+function parseCastformRagDatasetCount(content: string) {
+  return content
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Record<string, unknown>)
+    .filter(
+      (row) =>
+        typeof row.question === "string" &&
+        row.question.trim() &&
+        typeof row.answer === "string" &&
+        row.answer.trim() &&
+        Array.isArray(row.reference_chunks) &&
+        row.reference_chunks.length > 0
+    ).length
 }
 
 async function exists(projectId: string, relativePath: string) {
@@ -143,6 +164,10 @@ export async function computeTrainingReadiness(projectId: string): Promise<Train
     actionTasksContent,
     rewardSpecContent,
     configExists,
+    castformRunExists,
+    castformTrainDatasetContent,
+    castformEvalDatasetContent,
+    castformRagReadinessContent,
     chatTraceCount,
     actionTraceCount,
     feedbackTraceCount,
@@ -154,6 +179,10 @@ export async function computeTrainingReadiness(projectId: string): Promise<Train
     readTextIfExists(projectArtifactPath(projectId, "datasets", "action_tasks.jsonl")),
     readTextIfExists(projectArtifactPath(projectId, "rewards", "reward_spec.json")),
     exists(projectId, castformArtifactPaths.config),
+    exists(projectId, castformArtifactPaths.castformRun),
+    readTextIfExists(projectArtifactPath(projectId, "castform_project", "train_dataset.jsonl")),
+    readTextIfExists(projectArtifactPath(projectId, "castform_project", "eval_dataset.jsonl")),
+    readTextIfExists(projectArtifactPath(projectId, "castform_project", "rag_readiness.json")),
     traceCount(projectId, "logs/chat_traces.jsonl"),
     traceCount(projectId, "logs/action_traces.jsonl"),
     traceCount(projectId, "logs/feedback.jsonl"),
@@ -163,6 +192,35 @@ export async function computeTrainingReadiness(projectId: string): Promise<Train
     trainQa: parseJsonlCount(trainQaContent),
     evalQa: parseJsonlCount(evalQaContent),
     actionTasks: parseJsonlCount(actionTasksContent),
+  }
+  let castformTrainRows = 0
+  let castformEvalRows = 0
+  let castformRagReadiness:
+    | {
+        readyForRealTraining?: boolean
+        blockingIssues?: string[]
+        warnings?: string[]
+      }
+    | undefined
+
+  try {
+    castformTrainRows = parseCastformRagDatasetCount(castformTrainDatasetContent)
+    castformEvalRows = parseCastformRagDatasetCount(castformEvalDatasetContent)
+  } catch {
+    castformTrainRows = 0
+    castformEvalRows = 0
+  }
+
+  if (castformRagReadinessContent) {
+    try {
+      castformRagReadiness = JSON.parse(castformRagReadinessContent) as {
+        readyForRealTraining?: boolean
+        blockingIssues?: string[]
+        warnings?: string[]
+      }
+    } catch {
+      castformRagReadiness = undefined
+    }
   }
   const artifactRows = [
     {
@@ -212,15 +270,41 @@ export async function computeTrainingReadiness(projectId: string): Promise<Train
       required: true,
       exists: configExists,
     },
+    {
+      path: castformArtifactPaths.castformRun,
+      label: "Castform RAG run.py",
+      required: true,
+      exists: castformRunExists,
+    },
+    {
+      path: castformArtifactPaths.castformTrainDataset,
+      label: "Castform train dataset",
+      required: true,
+      exists: castformTrainRows > 0,
+      count: castformTrainRows,
+    },
+    {
+      path: castformArtifactPaths.castformEvalDataset,
+      label: "Castform eval dataset",
+      required: true,
+      exists: castformEvalRows > 0,
+      count: castformEvalRows,
+    },
+    {
+      path: castformArtifactPaths.castformRagReadiness,
+      label: "Castform RAG readiness",
+      required: true,
+      exists: Boolean(castformRagReadiness),
+    },
   ]
   const sourcePermissions = countSources(artifacts.sources)
   const blockingIssues: string[] = []
   const warnings: string[] = []
   const realSourceCount = artifacts.sources.filter((source) =>
-    ["exa", "firecrawl", "user_upload", "local_folder"].includes(source.provider)
+    ["exa", "user_upload", "local_folder"].includes(source.provider)
   ).length
   const prototypeSourceCount = artifacts.sources.filter((source) =>
-    ["seed", "wire_neurons", "web_mock", "codebase"].includes(source.provider)
+    ["seed", "wire_neurons", "web_mock", "codebase", "firecrawl"].includes(source.provider)
   ).length
 
   for (const artifact of artifactRows) {
@@ -235,6 +319,10 @@ export async function computeTrainingReadiness(projectId: string): Promise<Train
 
   if (datasetCounts.trainQa < 1 || datasetCounts.evalQa < 1) {
     blockingIssues.push("Train and eval datasets must contain at least one row each.")
+  }
+
+  if (castformTrainRows < 1 || castformEvalRows < 1) {
+    blockingIssues.push("Castform-native train_dataset.jsonl and eval_dataset.jsonl must contain valid RAG rows.")
   }
 
   if (realSourceCount === 0) {
@@ -270,6 +358,14 @@ export async function computeTrainingReadiness(projectId: string): Promise<Train
 
   if (artifacts.webDiscovery?.results.some((result) => result.permissionStatus === "unknown")) {
     warnings.push("Some discovered web sources need permission review.")
+  }
+
+  if (castformRagReadiness?.blockingIssues?.length) {
+    blockingIssues.push(...castformRagReadiness.blockingIssues)
+  }
+
+  if (castformRagReadiness?.warnings?.length) {
+    warnings.push(...castformRagReadiness.warnings)
   }
 
   if (chatTraceCount + actionTraceCount === 0) {
@@ -436,6 +532,9 @@ export async function createCastformRun(projectId: string, mode: CastformRunMode
   if (mode === "real") {
     const blockers = [
       ...readiness.blockingIssues,
+      ...(launchDeferredForWave16
+        ? ["Real Castform launch is deferred to Wave 17; Wave 16 only generates the RAG project."]
+        : []),
       ...(!config.realRunsEnabled ? ["CASTFORM_REAL_RUNS_ENABLED is not true."] : []),
       ...(!config.hasApiKey ? ["CASTFORM_API_KEY is not configured."] : []),
     ]
@@ -561,6 +660,7 @@ export async function maybeAutoLaunchCastformRun(projectId: string) {
   }
 
   if (
+    launchDeferredForWave16 ||
     !state.config.autoLaunchEnabled ||
     !state.config.realRunsEnabled ||
     !state.config.hasApiKey ||

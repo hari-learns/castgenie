@@ -27,6 +27,13 @@ const previewPaths = [
   "model_versions.json",
   "castform_project/README.md",
   "castform_project/config.yaml",
+  "castform_project/run.py",
+  "castform_project/train_dataset.jsonl",
+  "castform_project/eval_dataset.jsonl",
+  "castform_project/data/corpus_manifest.json",
+  "castform_project/rag_readiness.json",
+  "castform_project/src/env.py",
+  "castform_project/src/rewards.py",
 ]
 
 const excludedNames = new Set([".env", ".env.local", ".env.production"])

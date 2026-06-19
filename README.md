@@ -15,7 +15,8 @@ The product thesis is simple: a user describes the expert assistant or model wor
 - Wave 9: Castform readiness checks, mock training runs, model versions, and opt-in Python launcher.
 - Wave 10-14: local demo hardening, simple workspace UX, and first corrective Castform hosted-model routing.
 - Wave 15: Supabase-backed metadata, durable build jobs, and local worker runtime.
-- Wave 16-19: planned corrective path for real Castform RAG project generation, launch monitoring, hosted model chat, and end-to-end demo hardening. See `docs/wave-15-19-plan.md`.
+- Wave 16: real Castform RAG project generation with `run.py`, native train/eval datasets, corpus manifest, and readiness metadata.
+- Wave 17-19: planned corrective path for Castform launch monitoring, hosted model chat, and end-to-end demo hardening. See `docs/wave-15-19-plan.md`.
 
 Current behavior still includes local preview infrastructure. The intended product path is real-source ingestion, Castform RAG training, and hosted-model chat.
 
@@ -180,23 +181,28 @@ Allowed domains from the project form are passed to Exa as include-domain constr
 
 Unknown web-source permissions are not treated as licensed material. They block real Castform launch until reviewed.
 
-## Castform Export
+## Castform RAG Project
 
-Each successful build prepares `castform_project/` with:
+Each successful build prepares `castform_project/` with a real RAG project shape:
 
 - `README.md`
 - `config.yaml`
-- copied corpus data
+- `run.py`
+- `train_dataset.jsonl`
+- `eval_dataset.jsonl`
+- `data/corpus_manifest.json`
+- `rag_readiness.json`
+- copied corpus data and chunks
 - reward spec
-- training-ready Python/workspace inputs
+- `src/env.py`, `src/dataset.py`, `src/tools.py`, `src/rewards.py`, `src/train.py`
 
-The workspace is prepared for the server-side Castform runner. Real training is launched only after source/data readiness checks pass.
+Wave 16 does not launch paid training. The workspace is prepared for Wave 17 validation and launch plumbing after source/data readiness checks pass.
 
 ## Castform Runs
 
 CastGenie now treats local Gemini/mock responses as preview only. The main model chat unlocks after a hosted Castform model version exists.
 
-The Python runner lives at `scripts/castform_runner.py`. It imports `benchmax` only during a real launch/status check and never logs API keys. Real launch requires `CASTFORM_REAL_RUNS_ENABLED=true`, `CASTFORM_API_KEY`, Python 3.12 with `benchmax`, and permission-clean real sources. `CASTFORM_BASE_URL` is only an optional platform override. Set `CASTFORM_AUTO_LAUNCH=true` only when you want CastGenie to spend Castform credits automatically after readiness passes.
+The Python runner lives at `scripts/castform_runner.py`. It imports `benchmax` only during a real launch/status check and never logs API keys. Real launch requires `CASTFORM_REAL_RUNS_ENABLED=true`, `CASTFORM_API_KEY`, Python 3.12 with `benchmax`, and permission-clean real sources. `CASTFORM_BASE_URL` is only an optional platform override. In Wave 16, real launch is deliberately deferred even when auto-launch flags are set; Wave 17 removes that gate after validation and monitoring are implemented.
 
 ## Limitations
 
