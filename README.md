@@ -100,7 +100,7 @@ Optional real providers:
 - Exa search: `EXA_API_KEY`
 - Firecrawl scrape: `FIRECRAWL_API_KEY`
 
-Allowed domains from the project form are passed to Exa as include-domain constraints. Web sources are provenance-tracked and still require source-permission review before real training.
+Allowed domains from the project form are passed to Exa as include-domain constraints. CastGenie uses Exa `/search` directly with `type: "auto"` and `contents.highlights=true`; it does not require an Exa SDK, LangChain, or MCP layer. Web sources are provenance-tracked and still require source-permission review before real training.
 
 ## Castform Export
 

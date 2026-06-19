@@ -2,6 +2,7 @@ import type { DomainImportKind } from "@/types/imports"
 import type {
   WebDiscoveryReport,
   WebDiscoveryResult,
+  WebProviderTraceRecord,
   WebScrapeRecord,
   WebScrapeReport,
   WebSearchPlan,
@@ -148,12 +149,11 @@ async function exaResults(plan: WebSearchPlan): Promise<WebDiscoveryResult[]> {
       },
       body: JSON.stringify({
         query,
+        type: "auto",
         includeDomains: plan.allowedDomains.length ? plan.allowedDomains : undefined,
         numResults: Math.min(plan.maxResults, 10),
         contents: {
-          text: true,
           highlights: true,
-          summary: true,
         },
       }),
     })
@@ -166,8 +166,6 @@ async function exaResults(plan: WebSearchPlan): Promise<WebDiscoveryResult[]> {
       results?: Array<{
         title?: string
         url?: string
-        text?: string
-        summary?: string
         highlights?: string[]
       }>
     }
@@ -186,8 +184,7 @@ async function exaResults(plan: WebSearchPlan): Promise<WebDiscoveryResult[]> {
         selected: allowedDomainMatch || plan.allowedDomains.length === 0,
         allowedDomainMatch,
         permissionStatus: allowedDomainMatch ? "allowed_public" : "unknown",
-        text: item.text || item.highlights?.join("\n\n"),
-        summary: item.summary,
+        text: item.highlights?.join("\n\n"),
         warning: allowedDomainMatch
           ? undefined
           : "Domain was not explicitly allow-listed; review permission before training.",
@@ -244,16 +241,56 @@ export async function runWebDiscovery(input: WebDiscoveryInput): Promise<{
 }> {
   const plan = queryPlan(input)
   const warnings: string[] = []
+  const providerTrace: WebProviderTraceRecord[] = []
   let results: WebDiscoveryResult[]
 
   if (plan.provider === "mock") {
+    const startedAt = now()
     results = mockResults(input, plan)
+    providerTrace.push({
+      provider: "mock",
+      operation: "search",
+      status: "success",
+      startedAt,
+      finishedAt: now(),
+      inputSummary: `${plan.queries.length} mock search queries`,
+      outputSummary: `${results.length} mock results`,
+    })
     warnings.push("Mock web discovery used because MOCK_MODE is enabled or EXA_API_KEY is absent.")
   } else {
+    const startedAt = now()
     try {
       results = await exaResults(plan)
+      providerTrace.push({
+        provider: "exa",
+        operation: "search",
+        status: "success",
+        startedAt,
+        finishedAt: now(),
+        inputSummary: `${plan.queries.length} Exa search queries`,
+        outputSummary: `${results.length} Exa results`,
+      })
     } catch (error) {
       results = mockResults(input, { ...plan, provider: "mock" })
+      providerTrace.push({
+        provider: "exa",
+        operation: "search",
+        status: "failed",
+        startedAt,
+        finishedAt: now(),
+        inputSummary: `${plan.queries.length} Exa search queries`,
+        outputSummary: "0 Exa results",
+        error: error instanceof Error ? error.message : "Unknown provider error.",
+      })
+      providerTrace.push({
+        provider: "mock",
+        operation: "mock_fallback",
+        status: "fallback",
+        startedAt: now(),
+        finishedAt: now(),
+        inputSummary: "Exa search fallback",
+        outputSummary: `${results.length} mock results`,
+      })
       warnings.push(
         `Exa unavailable; fell back to mock web discovery. ${
           error instanceof Error ? error.message : "Unknown provider error."
@@ -280,8 +317,18 @@ export async function runWebDiscovery(input: WebDiscoveryInput): Promise<{
     }
 
     try {
+      const startedAt = now()
       const markdown = await firecrawlMarkdown(result.url)
       if (markdown) {
+        providerTrace.push({
+          provider: "firecrawl",
+          operation: "scrape",
+          status: "success",
+          startedAt,
+          finishedAt: now(),
+          inputSummary: result.url,
+          outputSummary: `${markdown.length} markdown characters`,
+        })
         documents.push({ result, markdown })
         scrapeRecords.push({
           resultId: result.id,
@@ -291,6 +338,15 @@ export async function runWebDiscovery(input: WebDiscoveryInput): Promise<{
           markdownLength: markdown.length,
         })
       } else {
+        providerTrace.push({
+          provider: "firecrawl",
+          operation: "scrape",
+          status: "skipped",
+          startedAt,
+          finishedAt: now(),
+          inputSummary: result.url,
+          outputSummary: "No Firecrawl key or no markdown returned",
+        })
         scrapeRecords.push({
           resultId: result.id,
           url: result.url,
@@ -301,6 +357,16 @@ export async function runWebDiscovery(input: WebDiscoveryInput): Promise<{
         })
       }
     } catch (error) {
+      providerTrace.push({
+        provider: "firecrawl",
+        operation: "scrape",
+        status: "failed",
+        startedAt: now(),
+        finishedAt: now(),
+        inputSummary: result.url,
+        outputSummary: "0 markdown characters",
+        error: error instanceof Error ? error.message : "Unknown scrape error.",
+      })
       scrapeRecords.push({
         resultId: result.id,
         url: result.url,
@@ -315,6 +381,15 @@ export async function runWebDiscovery(input: WebDiscoveryInput): Promise<{
   if (documents.length === 0 && plan.provider !== "mock") {
     const mockPlan = { ...plan, provider: "mock" as const }
     const mockSelected = mockResults(input, mockPlan)
+    const fallbackTrace: WebProviderTraceRecord = {
+      provider: "mock",
+      operation: "mock_fallback",
+      status: "fallback",
+      startedAt: now(),
+      finishedAt: now(),
+      inputSummary: "No usable real web documents",
+      outputSummary: `${mockSelected.length} mock documents`,
+    }
     warnings.push("Real web providers returned no usable text; fell back to mock web fixtures.")
 
     return {
@@ -326,6 +401,7 @@ export async function runWebDiscovery(input: WebDiscoveryInput): Promise<{
         selectedCount: mockSelected.length,
         skippedCount: 0,
         results: mockSelected,
+        providerTrace: [...providerTrace, fallbackTrace],
         warnings,
         generatedAt: now(),
       },
@@ -343,6 +419,7 @@ export async function runWebDiscovery(input: WebDiscoveryInput): Promise<{
           status: "used_search_text",
           markdownLength: result.text?.length ?? 0,
         })),
+        providerTrace: [...providerTrace, fallbackTrace],
         warnings,
         generatedAt: now(),
       },
@@ -364,6 +441,7 @@ export async function runWebDiscovery(input: WebDiscoveryInput): Promise<{
       selectedCount: selected.length,
       skippedCount: results.filter((result) => !result.selected).length,
       results,
+      providerTrace,
       warnings,
       generatedAt: now(),
     },
@@ -377,6 +455,7 @@ export async function runWebDiscovery(input: WebDiscoveryInput): Promise<{
       skippedCount: scrapeRecords.filter((record) => record.status === "skipped").length,
       failedCount: scrapeRecords.filter((record) => record.status === "failed").length,
       records: scrapeRecords,
+      providerTrace,
       warnings: [...new Set([...warnings, ...scrapeWarnings])],
       generatedAt: now(),
     },

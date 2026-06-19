@@ -1445,55 +1445,113 @@ Implement Wave 7 only. Add evals, trace export, reward spec generation, and dive
 
 ---
 
-# Wave 8 — Real source/search/scrape/upload/codebase adapters
+# Wave 8 — Automatic web discovery and scrape import
 
 ## Goal
 
-Add real ingestion options without making the demo fragile.
+Implement Wave 8 as CastGenie’s first automatic public-source discovery layer. After Wave 7, users can upload source files. Wave 8 lets the backend infer search needs from the English model intent, discover public web sources, extract usable markdown, and feed those sources into the existing local JSON pipeline, RAG assistant, artifacts, and Castform export.
+
+Mock mode remains the reliability baseline. Real Exa and Firecrawl calls are optional enhancements behind env vars.
+
+## Provider references
+
+Use provider contracts only, no SDK dependency in Wave 8.
+
+Exa Search:
+
+- Canonical setup guide: https://docs.exa.ai/reference/search-api-guide-for-coding-agents
+- Endpoint: `POST /search`
+- Base URL: `https://api.exa.ai`
+- Auth: `x-api-key`
+- Inputs: query, `type`, `includeDomains`, `numResults`, content options
+- Default Wave 8 search type: `auto`
+- Default Wave 8 content mode: `contents.highlights=true`
+- Output: ranked web results with title, URL, and highlights/snippet content when available
+
+Default Exa request shape:
+
+```json
+{
+  "query": "user intent derived source query",
+  "type": "auto",
+  "includeDomains": ["optional-allowed-domain.example"],
+  "numResults": 10,
+  "contents": {
+    "highlights": true
+  }
+}
+```
+
+Keep Wave 8 on raw `results` plus highlights. Do not use Exa `outputSchema`, synthesized search, or deep search by default; those are later enhancements for structured enrichment.
+
+Firecrawl Scrape:
+
+- Endpoint: `POST /v2/scrape`
+- Base URL: `https://api.firecrawl.dev`
+- Auth: Bearer token
+- Input: URL, output format
+- Output: markdown when available
 
 ## Tasks
 
-1. Implement provider interfaces for search, scrape, upload, folder import, and codebase import.
-2. Keep mock providers as default.
-3. Implement Exa adapter if `EXA_API_KEY` exists and `MOCK_MODE=false`.
-4. Implement Firecrawl adapter if `FIRECRAWL_API_KEY` exists and `MOCK_MODE=false`.
-5. Add upload/local import controls for JSON/PDF/text fixtures.
-6. Add a codebase import placeholder for OWASP/security projects:
-   - file inventory
-   - language detection
-   - vulnerable/fixed example ingestion later
-   - permission/security warning
-7. Add source-policy controls:
-   - max sources
-   - allowed domains
-   - blocklist
-   - public/licensed/user-provided permission note
-8. Add robust failure behavior:
-   - if external API call fails, log error
-   - continue with remaining sources
-   - fall back to seed/mock docs if configured
-9. Never scrape login-only, paywalled, or obviously restricted sources.
-10. Add fetchedAt, provider, permission, and provenance metadata to every source.
+1. Add web discovery contracts:
+   - `WebSearchPlan`
+   - `WebSearchResult`
+   - `WebScrapeResult`
+   - `WebDiscoveryReport`
+   - provider trace records for mock/Exa/Firecrawl calls.
+2. Add provider adapters:
+   - mock web discovery provider, always available
+   - Exa provider, used only when `MOCK_MODE=false` and `EXA_API_KEY` exists
+   - Firecrawl scraper, used only when `MOCK_MODE=false` and `FIRECRAWL_API_KEY` exists
+   - graceful fallback to mock/no-scrape when providers fail.
+3. Integrate into import pipeline:
+   - uploaded parseable files remain highest priority
+   - if no uploaded parseable files exist, run web discovery before CA/security/generic synthetic fallback
+   - convert discovered/scraped markdown into existing `SourceRecord`, `DocumentRecord`, chunks, datasets, actions, reward spec, and Castform export
+   - preserve URL, provider, fetchedAt, permission status, scrape status, and warnings.
+4. Add artifacts:
+   - `imports/web_search_plan.json`
+   - `imports/web_discovery.json`
+   - `imports/web_scrape_report.json`
+   - discovered source documents under existing `documents/`
+   - all generated data continues through `source_manifest.json`, `chunks.jsonl`, datasets, rewards, and `castform_project/`.
+5. Update UI:
+   - Sources tab shows web discovery summary, provider used, query, allowed domains, discovered URLs, scraped/skipped status, and warnings
+   - Artifact browser previews web discovery artifacts
+   - New project form keeps allowed domains and max sources meaningful for web discovery.
+
+## Rules
+
+- Never scrape login-only, paywalled, or obviously restricted sources.
+- Do not treat unknown web permissions as licensed.
+- Real provider calls must never run in `MOCK_MODE=true`.
+- App must work with no Exa or Firecrawl keys.
+- Do not add LangChain, MCP, or provider SDKs in Wave 8.
+- Keep local JSON as source of truth.
 
 ## Acceptance checks
 
 ```bash
 pnpm lint
 pnpm build
+pnpm audit --audit-level moderate
 ```
 
 Functional check:
 
-- With `MOCK_MODE=true`, behavior is unchanged.
-- With API keys and `MOCK_MODE=false`, real discovery/extraction is attempted.
-- Local JSON import can load a Wire Neurons-shaped fixture.
-- Failures do not crash the whole build.
-- Source manifest accurately shows provider and permission status.
+- Create a generic project with no uploads and web discovery enabled; confirm mock web provider generates web discovery artifacts and assistant answers cite discovered chunks.
+- Create a CA project with no uploads; confirm current CA fixture behavior remains valid unless web discovery is explicitly selected and available.
+- Create a project with uploaded files; confirm uploads still take precedence over web discovery.
+- Set no Exa/Firecrawl keys; confirm `MOCK_MODE=true` works without failures.
+- With `EXA_API_KEY` only, confirm search results are recorded and usable highlights are imported when available.
+- With `EXA_API_KEY` and `FIRECRAWL_API_KEY`, confirm selected URLs with insufficient search text are scraped to markdown and imported.
+- Confirm source manifest, chunks, citations, Castform ZIP, artifact previews, and logs include web provenance.
 
 ## Codex prompt
 
 ```text
-Implement Wave 8 only. Add real ingestion adapters behind env flags: Exa, Firecrawl, upload/local folder import, Wire Neurons-shaped JSON import, and codebase import placeholder. Preserve MOCK_MODE reliability, provenance, permission metadata, graceful failures, and fallback behavior. Run lint and build before stopping.
+Implement Wave 8 only. Add automatic public web discovery and scrape import behind env flags. Use Exa /search with type=auto and contents.highlights=true, use Firecrawl /v2/scrape for markdown extraction when search results lack usable text, preserve MOCK_MODE reliability, provenance, permission metadata, graceful failures, upload precedence, and local JSON as source of truth. Run lint, build, and audit before stopping.
 ```
 
 ---

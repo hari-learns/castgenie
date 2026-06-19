@@ -1,5 +1,16 @@
 export type WebProviderName = "mock" | "exa" | "firecrawl"
 
+export type WebProviderTraceRecord = {
+  provider: WebProviderName
+  operation: "search" | "scrape" | "mock_fallback"
+  status: "skipped" | "success" | "failed" | "fallback"
+  startedAt: string
+  finishedAt: string
+  inputSummary: string
+  outputSummary: string
+  error?: string
+}
+
 export type WebSearchPlan = {
   projectId: string
   provider: WebProviderName
@@ -25,6 +36,8 @@ export type WebDiscoveryResult = {
   warning?: string
 }
 
+export type WebSearchResult = WebDiscoveryResult
+
 export type WebDiscoveryReport = {
   projectId: string
   provider: "mock" | "exa"
@@ -32,6 +45,7 @@ export type WebDiscoveryReport = {
   selectedCount: number
   skippedCount: number
   results: WebDiscoveryResult[]
+  providerTrace: WebProviderTraceRecord[]
   warnings: string[]
   generatedAt: string
 }
@@ -45,6 +59,8 @@ export type WebScrapeRecord = {
   warning?: string
 }
 
+export type WebScrapeResult = WebScrapeRecord
+
 export type WebScrapeReport = {
   projectId: string
   provider: WebProviderName
@@ -53,6 +69,7 @@ export type WebScrapeReport = {
   skippedCount: number
   failedCount: number
   records: WebScrapeRecord[]
+  providerTrace: WebProviderTraceRecord[]
   warnings: string[]
   generatedAt: string
 }
