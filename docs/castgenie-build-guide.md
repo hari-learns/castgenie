@@ -969,6 +969,24 @@ bg-primary text-primary-foreground
 
 Codex must implement one wave at a time. Each wave must pass its acceptance checks before moving to the next wave.
 
+## Corrective roadmap after Wave 14
+
+The original local RAG assistant path is now treated as preview/staging. The current product target is real Castform RAG training and hosted-model chat:
+
+```text
+English intent -> real sources -> cleaned corpus -> Castform RAG project -> Supabase job -> Castform run -> hosted model chat
+```
+
+Use `docs/wave-15-19-plan.md` as the active tracker for the next implementation sequence:
+
+- Wave 15: Supabase persistence and job runtime.
+- Wave 16: Castform RAG project generator.
+- Wave 17: real Castform launch, monitoring, and model versions.
+- Wave 18: product UX for training and hosted chat.
+- Wave 19: real demo hardening.
+
+The old local JSON pipeline should remain as an offline/test fallback, not the final product architecture.
+
 ---
 
 # Wave 0 — Scope lock and repo initialization
@@ -1890,7 +1908,7 @@ The product hides RAG and training infrastructure behind plain English. Users ge
 
 ## Definition of done
 
-The project is demo-ready only when all are true:
+The local-preview project is demo-ready only when all are true:
 
 - A user can create a workspace from a prompt.
 - A CA Advanced Accounting workspace can be built in mock mode.
@@ -1908,10 +1926,12 @@ The project is demo-ready only when all are true:
 - No horizontal overflow.
 - README explains thesis, setup, mock mode, real providers, and demo script.
 
+The real Castform demo is not complete until Waves 15-19 are implemented: Supabase-backed jobs, generated Castform RAG project files, real Castform launch, run tracking, hosted model version metadata, and hosted-model chat.
+
 ## Final note to Codex
 
 Build the project like a real internal product prototype, not a landing page. The winning impression is:
 
 ```text
-This person understands Castform’s adoption problem and built a product-shaped on-ramp: English → corpus → RAG → evals → traces → Castform training artifacts.
+This person understands Castform’s adoption problem and built a product-shaped on-ramp: English → real sources → corpus → RAG env/datasets/rewards → Castform training → hosted model chat.
 ```

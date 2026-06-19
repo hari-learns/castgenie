@@ -1,6 +1,6 @@
 # CastGenie
 
-CastGenie is a local-first prototype for turning an English model intent into a source-grounded assistant workspace. It creates project artifacts, import summaries, local RAG chat/actions, traces, Castform-ready export scaffolds, readiness checks, and mock training runs.
+CastGenie is a prototype for turning an English model intent into a Castform-trainable RAG workspace. It creates project artifacts, import summaries, local preview chat/actions, traces, Castform project files, readiness checks, and real training handoff when configured.
 
 The product thesis is simple: a user describes the expert assistant or model workflow they want in plain English, and CastGenie handles planning, source intake, chunking, dataset generation, actions, traces, artifacts, and Castform handoff behind the scenes.
 
@@ -13,9 +13,10 @@ The product thesis is simple: a user describes the expert assistant or model wor
 - Wave 7: real local source intake for TXT, MD, JSON, JSONL, and CSV uploads.
 - Wave 8: automatic web discovery with mock-first Exa/Firecrawl provider adapters.
 - Wave 9: Castform readiness checks, mock training runs, model versions, and opt-in Python launcher.
-- Wave 10: final local demo hardening, productized actions, tests, docs, and responsive checks.
+- Wave 10-14: local demo hardening, simple workspace UX, and first corrective Castform hosted-model routing.
+- Wave 15-19: planned corrective path for Supabase-backed jobs, real Castform RAG project generation, launch monitoring, hosted model chat, and end-to-end demo hardening. See `docs/wave-15-19-plan.md`.
 
-This is intentionally simple local infrastructure. Local JSON storage is the source of truth for this project.
+Current behavior still includes local preview infrastructure. The intended product path is real-source ingestion, Castform RAG training, and hosted-model chat.
 
 ## Run Locally
 
@@ -46,6 +47,9 @@ GEMINI_BASE_URL=https://generativelanguage.googleapis.com
 GEMINI_MODEL=gemini-3.5-flash
 EXA_API_KEY=
 FIRECRAWL_API_KEY=
+NEXT_PUBLIC_SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+CASTGENIE_STORAGE_MODE=supabase
 CASTFORM_API_KEY=
 # Optional platform override. Leave empty unless Castform support gives you one.
 CASTFORM_BASE_URL=
@@ -69,8 +73,8 @@ Use this 90-second local demo flow:
 4. Open Sources and explain uploaded files, mock web discovery, permission status, and warnings.
 5. Open Assistant, ask a source-grounded question, then run one generated action.
 6. Show citations, feedback, copy controls, and markdown download for action results.
-7. Open Castform Export, show artifacts, download ZIP, and create a mock Castform run.
-8. Explain that real Castform launch is opt-in and blocked unless source permissions and env vars are ready.
+7. Open Files & Export and show the generated Castform project files.
+8. Open Training and explain whether the project is blocked, training on Castform, or ready for hosted-model chat.
 
 ## Final Local Demo Checklist
 
@@ -80,8 +84,8 @@ Use this 90-second local demo flow:
 - Ask the assistant a question and verify citations.
 - Run a generated action and verify citations, copy, feedback, and `.md` download.
 - Download the Castform ZIP.
-- Create and refresh a mock Castform run until a model version appears.
-- Confirm real Castform launch remains disabled or blocked without env configuration.
+- Confirm normal chat remains locked until a hosted Castform model version exists.
+- Confirm real Castform launch remains disabled or blocked without env configuration and source readiness.
 
 ## Local Storage
 
