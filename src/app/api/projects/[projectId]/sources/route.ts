@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 
 import { readProject, readProjectArtifacts, updateProject } from "@/lib/storage"
+import { maybeAutoLaunchCastformRun } from "@/server/castform/runs"
 import { runBuildJob } from "@/server/jobs/runner"
 import {
   defaultSourceConfig,
@@ -130,6 +131,7 @@ export async function POST(request: Request, { params }: RouteProps) {
   await updateProject(projectId, { sourceConfig: manifest.sourceConfig })
 
   const build = parsed.data.rebuild ? await runBuildJob(projectId) : null
+  const castformRun = build ? await maybeAutoLaunchCastformRun(projectId) : null
   const [parsedUploads, artifacts] = await Promise.all([
     parseUploadedDocuments(projectId),
     readProjectArtifacts(projectId),
@@ -138,6 +140,7 @@ export async function POST(request: Request, { params }: RouteProps) {
   return NextResponse.json({
     projectId,
     jobId: build?.jobId,
+    castformRunId: castformRun?.id,
     status: build?.project.status ?? project.status,
     uploadManifest: manifest,
     uploadParseReport: parsedUploads.report,

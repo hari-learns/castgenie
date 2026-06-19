@@ -33,11 +33,15 @@ export async function runCastformPython(input: {
       args,
       {
         cwd: projectRoot(input.projectId),
-        timeout: 30_000,
+        timeout: 180_000,
         env: {
           ...process.env,
           CASTFORM_API_KEY: process.env.CASTFORM_API_KEY ?? "",
           CASTFORM_BASE_URL: process.env.CASTFORM_BASE_URL ?? "",
+          CASTFORM_BASE_MODEL: process.env.CASTFORM_BASE_MODEL ?? "Qwen/Qwen3.5-4B",
+          CASTFORM_INFERENCE_BASE_URL:
+            process.env.CASTFORM_INFERENCE_BASE_URL ?? "https://llm.castform.com/v1",
+          CASTFORM_NUM_EPOCHS: process.env.CASTFORM_NUM_EPOCHS ?? "5",
         },
         maxBuffer: 1024 * 1024,
       },

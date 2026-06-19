@@ -9,11 +9,13 @@ import {
   readProjectArtifacts,
 } from "@/lib/storage"
 import { generateChatAnswer } from "@/server/ai/providers"
+import { getHostedModelVersion } from "@/server/castform/runs"
 import type { ChatMessage } from "@/types/artifacts"
 import type { ChatTrace } from "@/types/traces"
 
 const chatSchema = z.object({
   message: z.string().trim().min(1).max(4000),
+  preview: z.boolean().optional(),
   history: z
     .array(
       z.object({
@@ -65,6 +67,18 @@ export async function POST(request: Request, { params }: RouteProps) {
   }
 
   const artifacts = await readProjectArtifacts(projectId)
+  const hostedModel = await getHostedModelVersion(projectId)
+
+  if (!hostedModel && !parsed.data.preview) {
+    return NextResponse.json(
+      {
+        error:
+          "No hosted Castform model is ready yet. Use preview mode or wait for Castform training to complete.",
+      },
+      { status: 409 }
+    )
+  }
+
   const retrieval = retrieveChunks({
     query: parsed.data.message,
     chunks: artifacts.chunks,
@@ -77,6 +91,8 @@ export async function POST(request: Request, { params }: RouteProps) {
     message: parsed.data.message,
     history: (parsed.data.history ?? []) as ChatMessage[],
     retrieval,
+    hostedModel,
+    preview: Boolean(parsed.data.preview),
   })
   const traceId = `chat_${nanoid(10)}`
   const trace: ChatTrace = {

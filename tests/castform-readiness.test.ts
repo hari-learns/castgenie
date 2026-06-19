@@ -35,7 +35,10 @@ describe("computeTrainingReadiness", () => {
         },
       ])
     )
-    await write("chunks.jsonl", `${JSON.stringify({ id: "chunk_1" })}\n`)
+    await write(
+      "chunks.jsonl",
+      [1, 2, 3].map((index) => JSON.stringify({ id: `chunk_${index}` })).join("\n") + "\n"
+    )
     await write("datasets/train_qa.jsonl", `${JSON.stringify({ id: "train_1" })}\n`)
     await write("datasets/eval_qa.jsonl", `${JSON.stringify({ id: "eval_1" })}\n`)
     await write("datasets/action_tasks.jsonl", `${JSON.stringify({ id: "action_1" })}\n`)
@@ -64,7 +67,10 @@ describe("computeTrainingReadiness", () => {
         },
       ])
     )
-    await write("chunks.jsonl", `${JSON.stringify({ id: "chunk_1" })}\n`)
+    await write(
+      "chunks.jsonl",
+      [1, 2, 3].map((index) => JSON.stringify({ id: `chunk_${index}` })).join("\n") + "\n"
+    )
     await write("datasets/train_qa.jsonl", `${JSON.stringify({ id: "train_1" })}\n`)
     await write("datasets/eval_qa.jsonl", `${JSON.stringify({ id: "eval_1" })}\n`)
     await write("datasets/action_tasks.jsonl", `${JSON.stringify({ id: "action_1" })}\n`)

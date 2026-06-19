@@ -140,7 +140,7 @@ function ModelVersions({ versions }: { versions: ModelVersion[] }) {
       <CardHeader>
         <CardTitle>Model versions</CardTitle>
         <CardDescription>
-          Stored model metadata created from completed mock or real runs.
+          Stored model metadata. Only hosted versions are used by the main chat.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -164,7 +164,8 @@ function ModelVersions({ versions }: { versions: ModelVersion[] }) {
           ))
         ) : (
           <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-            No model version yet. Complete a mock run or configured real run.
+            No hosted model version yet. CastGenie will keep chat locked until
+            real Castform training produces one.
           </div>
         )}
       </CardContent>
@@ -183,7 +184,6 @@ export function CastformRunsPanel({
     () =>
       state.config.realRunsEnabled &&
       state.config.hasApiKey &&
-      state.config.hasBaseUrl &&
       state.readiness.readyForReal,
     [state]
   )
@@ -237,8 +237,7 @@ export function CastformRunsPanel({
         <CardHeader>
           <CardTitle>Castform runs</CardTitle>
           <CardDescription>
-            Mock runs are always local. Real runs require explicit env setup and a
-            Python runner.
+            Real runs use Castform credits. Mock runs are local simulations only.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -271,6 +270,12 @@ export function CastformRunsPanel({
 
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <div>
+              <p className="text-sm text-muted-foreground">Auto launch</p>
+              <p className="font-medium">
+                {state.config.autoLaunchEnabled ? "Enabled" : "Disabled"}
+              </p>
+            </div>
+            <div>
               <p className="text-sm text-muted-foreground">Real runs</p>
               <p className="font-medium">
                 {state.config.realRunsEnabled ? "Enabled" : "Disabled"}
@@ -283,10 +288,14 @@ export function CastformRunsPanel({
               </p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Base URL</p>
+              <p className="text-sm text-muted-foreground">Platform URL override</p>
               <p className="font-medium">
-                {state.config.hasBaseUrl ? "Configured" : "Missing"}
+                {state.config.hasBaseUrl ? "Configured" : "Default"}
               </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Model</p>
+              <p className="font-medium">{state.config.baseModel}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Python</p>

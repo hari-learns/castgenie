@@ -95,6 +95,7 @@ export type ModelVersion = {
   castformRunId?: string
   statusUrl?: string
   modelEndpoint?: string
+  modelName?: string
 }
 
 export type CastformRunsResponse = {
@@ -104,8 +105,11 @@ export type CastformRunsResponse = {
   modelVersions: ModelVersion[]
   config: {
     realRunsEnabled: boolean
+    autoLaunchEnabled: boolean
     hasApiKey: boolean
     hasBaseUrl: boolean
+    inferenceBaseUrl: string
+    baseModel: string
     pythonBin: string
   }
 }

@@ -140,6 +140,18 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
   const buildJob = await readBuildJob(project.id)
   const buildLogs = await readArtifactPreview(project.id, "logs/build_logs.jsonl")
   const castformState = await getCastformState(project.id)
+  const hostedModel = castformState?.modelVersions.find(
+    (version) => version.status === "hosted" && version.modelName
+  )
+  const modelReady = Boolean(hostedModel)
+  const workspaceStatus = modelReady
+    ? "Model ready"
+    : castformState?.latestRun?.mode === "real" &&
+        ["queued", "running"].includes(castformState.latestRun.status)
+      ? "Training on Castform"
+      : castformState?.readiness.readyForReal
+        ? "Ready to train"
+        : "Training blocked"
   const artifactBrowserData = await getArtifactBrowserData(project.id)
   const sidebarSectionLinks: SidebarSectionLink[] = projectSections.map((section) => ({
     title: section.label,
@@ -208,8 +220,15 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
               <ProjectAssistant
                 projectId={project.id}
                 actions={artifacts.modelGoal?.generatedActions ?? []}
-                disabled={project.status !== "ready" && project.status !== "model_ready"}
-                disabledReason="The model workspace is still being prepared. Chat and workflows unlock when the project is ready."
+                disabled={!modelReady}
+                disabledReason={
+                  castformState?.latestRun?.mode === "real" &&
+                  ["queued", "running"].includes(castformState.latestRun.status)
+                    ? "Castform training has started. Chat unlocks when a hosted model version is ready."
+                    : castformState?.readiness.blockingIssues.length
+                      ? `Training is blocked: ${castformState.readiness.blockingIssues[0]}`
+                      : "No hosted Castform model is ready yet. The preview assistant is not the trained model."
+                }
                 contextSlot={
                   <Card>
                     <CardHeader>
@@ -241,9 +260,7 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
                         <div className="rounded-lg border border-border p-3">
                           <p className="text-xs text-muted-foreground">Status</p>
                           <p className="mt-1 text-2xl font-semibold">
-                            {project.status === "ready" || project.status === "model_ready"
-                              ? "Ready"
-                              : "Setup"}
+                            {workspaceStatus}
                           </p>
                         </div>
                       </div>
@@ -267,8 +284,8 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
               <ProjectAssistant
                 projectId={project.id}
                 actions={artifacts.modelGoal?.generatedActions ?? []}
-                disabled={project.status !== "ready" && project.status !== "model_ready"}
-                disabledReason="Workflows unlock when the project is ready."
+                disabled={!modelReady}
+                disabledReason="Workflows use the hosted Castform model and unlock when training produces a model version."
                 showChat={false}
                 suggestedPrompt=""
               />

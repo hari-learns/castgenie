@@ -3,6 +3,7 @@ import { nanoid } from "nanoid"
 import { z } from "zod"
 
 import { createProject, listProjects, updateProject } from "@/lib/storage"
+import { maybeAutoLaunchCastformRun } from "@/server/castform/runs"
 import { runBuildJob } from "@/server/jobs/runner"
 import {
   defaultSourceConfig,
@@ -134,10 +135,12 @@ export async function POST(request: Request) {
     }
 
     const build = await runBuildJob(project.id)
+    const castformRun = await maybeAutoLaunchCastformRun(project.id)
 
     return NextResponse.json({
       projectId: project.id,
       jobId: build.jobId,
+      castformRunId: castformRun?.id,
       redirectTo: `/projects/${project.id}`,
     })
   }
@@ -170,10 +173,12 @@ export async function POST(request: Request) {
     }),
   })
   const build = await runBuildJob(project.id)
+  const castformRun = await maybeAutoLaunchCastformRun(project.id)
 
   return NextResponse.json({
     projectId: project.id,
     jobId: build.jobId,
+    castformRunId: castformRun?.id,
     redirectTo: `/projects/${project.id}`,
   })
 }

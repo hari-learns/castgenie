@@ -70,7 +70,8 @@ type ProjectAssistantProps = {
 }
 
 function providerLabel(provider?: ProviderName) {
-  return provider === "gemini" ? "Gemini" : "Mock local"
+  if (provider === "castform") return "Castform"
+  return provider === "gemini" ? "Gemini preview" : "Mock preview"
 }
 
 function CitationList({ citations }: { citations?: ChatCitation[] }) {
@@ -294,7 +295,7 @@ ${citations}
           <CardHeader>
             <CardTitle>Ask this model</CardTitle>
             <CardDescription>
-              Answers use the sources prepared for this project.
+              Available after Castform training produces a hosted model.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
@@ -315,8 +316,7 @@ ${citations}
             <div className="flex min-h-72 flex-col gap-3 rounded-lg border border-border bg-muted/20 p-3">
               {messages.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                  Ask a question about this project. If the source material is weak,
-                  the model should say so.
+                  Ask the trained Castform model once training completes.
                 </div>
               ) : null}
               {isSending ? (

@@ -47,9 +47,14 @@ GEMINI_MODEL=gemini-3.5-flash
 EXA_API_KEY=
 FIRECRAWL_API_KEY=
 CASTFORM_API_KEY=
+# Optional platform override. Leave empty unless Castform support gives you one.
 CASTFORM_BASE_URL=
-CASTFORM_PYTHON_BIN=python3
+CASTFORM_PYTHON_BIN=python3.12
 CASTFORM_REAL_RUNS_ENABLED=false
+CASTFORM_AUTO_LAUNCH=false
+CASTFORM_BASE_MODEL=Qwen/Qwen3.5-4B
+CASTFORM_INFERENCE_BASE_URL=https://llm.castform.com/v1
+CASTFORM_NUM_EPOCHS=5
 ```
 
 `MOCK_MODE=true` must work without provider keys. Set provider keys only in `.env.local`; never commit them.
@@ -147,15 +152,15 @@ Each successful build prepares `castform_project/` with:
 - `config.yaml`
 - copied corpus data
 - reward spec
-- inert Python scaffolds
+- training-ready Python/workspace inputs
 
-The scaffolds do not import Castform at module load and do not make network calls. Wave 9 can create mock runs locally and can call a real Castform Python runner only when explicitly configured.
+The workspace is prepared for the server-side Castform runner. Real training is launched only after source/data readiness checks pass.
 
 ## Castform Runs
 
-Wave 9 adds local readiness checks and mock training runs. Real Castform launch is disabled by default and only appears when `CASTFORM_REAL_RUNS_ENABLED=true`, `CASTFORM_API_KEY`, `CASTFORM_BASE_URL`, and a Python runtime are configured.
+CastGenie now treats local Gemini/mock responses as preview only. The main model chat unlocks after a hosted Castform model version exists.
 
-The Python runner lives at `scripts/castform_runner.py`. It imports `benchmax` only during an explicit real launch/status check and never logs API keys. Without Castform configuration, the app still uses the local RAG assistant and mock run history.
+The Python runner lives at `scripts/castform_runner.py`. It imports `benchmax` only during a real launch/status check and never logs API keys. Real launch requires `CASTFORM_REAL_RUNS_ENABLED=true`, `CASTFORM_API_KEY`, Python 3.12 with `benchmax`, and permission-clean real sources. `CASTFORM_BASE_URL` is only an optional platform override. Set `CASTFORM_AUTO_LAUNCH=true` only when you want CastGenie to spend Castform credits automatically after readiness passes.
 
 ## Limitations
 
@@ -163,5 +168,5 @@ The Python runner lives at `scripts/castform_runner.py`. It imports `benchmax` o
 - No authentication, billing, multi-user permissions, queue workers, or Postgres.
 - No PDF extraction.
 - No real codebase scanning; OWASP codebase import remains a placeholder.
-- Real Castform launch requires local Python, `benchmax`, credentials, and permission-clean artifacts.
+- Real Castform launch requires local Python 3.12, `benchmax`, credentials, and permission-clean real sources.
 - Generated outputs are prototype artifacts and need human review before real training or production use.

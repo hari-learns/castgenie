@@ -113,10 +113,15 @@ async function writeModelVersions(projectId: string, versions: ModelVersion[]) {
 }
 
 function realConfig() {
+  const baseUrl = process.env.CASTFORM_BASE_URL ?? ""
+
   return {
     realRunsEnabled: process.env.CASTFORM_REAL_RUNS_ENABLED === "true",
+    autoLaunchEnabled: process.env.CASTFORM_AUTO_LAUNCH === "true",
     hasApiKey: Boolean(process.env.CASTFORM_API_KEY),
-    hasBaseUrl: Boolean(process.env.CASTFORM_BASE_URL),
+    hasBaseUrl: Boolean(baseUrl) && baseUrl !== "your_castform_base_url_here",
+    inferenceBaseUrl: process.env.CASTFORM_INFERENCE_BASE_URL || "https://llm.castform.com/v1",
+    baseModel: process.env.CASTFORM_BASE_MODEL || "Qwen/Qwen3.5-4B",
     pythonBin: process.env.CASTFORM_PYTHON_BIN || "python3",
   }
 }
@@ -204,11 +209,29 @@ export async function computeTrainingReadiness(projectId: string): Promise<Train
   const sourcePermissions = countSources(artifacts.sources)
   const blockingIssues: string[] = []
   const warnings: string[] = []
+  const realSourceCount = artifacts.sources.filter((source) =>
+    ["exa", "firecrawl", "user_upload", "local_folder"].includes(source.provider)
+  ).length
+  const prototypeSourceCount = artifacts.sources.filter((source) =>
+    ["seed", "wire_neurons", "web_mock", "codebase"].includes(source.provider)
+  ).length
 
   for (const artifact of artifactRows) {
     if (artifact.required && !artifact.exists) {
       blockingIssues.push(`Missing required artifact: ${artifact.path}`)
     }
+  }
+
+  if (datasetCounts.chunks < 3) {
+    blockingIssues.push("At least 3 useful chunks are required for real training.")
+  }
+
+  if (datasetCounts.trainQa < 1 || datasetCounts.evalQa < 1) {
+    blockingIssues.push("Train and eval datasets must contain at least one row each.")
+  }
+
+  if (realSourceCount === 0) {
+    blockingIssues.push("Real Castform training requires uploaded or real web sources.")
   }
 
   if (sourcePermissions.unknown > 0) {
@@ -234,8 +257,8 @@ export async function computeTrainingReadiness(projectId: string): Promise<Train
     }
   }
 
-  if (artifacts.sources.some((source) => source.provider === "seed" || source.provider === "wire_neurons")) {
-    warnings.push("Prototype fixture sources should be replaced or reviewed before real training.")
+  if (prototypeSourceCount > 0) {
+    warnings.push("Prototype fixture or mock sources are excluded from real-training confidence.")
   }
 
   if (artifacts.webDiscovery?.results.some((result) => result.permissionStatus === "unknown")) {
@@ -304,6 +327,37 @@ async function ensureModelVersionForRun(run: CastformRun) {
   return next
 }
 
+async function ensureHostedModelVersion(run: CastformRun, modelName?: string) {
+  if (!run.castformRunId) {
+    return
+  }
+
+  const versions = await readModelVersions(run.projectId)
+
+  if (versions.some((version) => version.sourceRunId === run.id && version.status === "hosted")) {
+    return
+  }
+
+  const config = realConfig()
+  await writeModelVersions(run.projectId, [
+    {
+      ...mockModelVersion(run.projectId, run),
+      id: `model_real_${nanoid(10)}`,
+      status: "hosted",
+      castformRunId: run.castformRunId,
+      statusUrl: run.statusUrl,
+      modelEndpoint: config.inferenceBaseUrl,
+      modelName: modelName ?? `ft:${config.baseModel}:${run.castformRunId}:latest`,
+    },
+    ...versions,
+  ])
+}
+
+export async function getHostedModelVersion(projectId: string) {
+  const versions = await readModelVersions(projectId)
+  return versions.find((version) => version.status === "hosted" && version.modelName)
+}
+
 async function callPythonRunner(projectId: string, operation: "launch" | "status", run?: CastformRun) {
   const config = realConfig()
   const { runCastformPython } = await import("@/server/castform/python-runner")
@@ -319,6 +373,7 @@ async function callPythonRunner(projectId: string, operation: "launch" | "status
     castformRunId?: string
     statusUrl?: string
     modelEndpoint?: string
+    modelName?: string
     error?: string
   }
 }
@@ -376,7 +431,6 @@ export async function createCastformRun(projectId: string, mode: CastformRunMode
       ...readiness.blockingIssues,
       ...(!config.realRunsEnabled ? ["CASTFORM_REAL_RUNS_ENABLED is not true."] : []),
       ...(!config.hasApiKey ? ["CASTFORM_API_KEY is not configured."] : []),
-      ...(!config.hasBaseUrl ? ["CASTFORM_BASE_URL is not configured."] : []),
     ]
 
     if (blockers.length > 0) {
@@ -410,6 +464,9 @@ export async function createCastformRun(projectId: string, mode: CastformRunMode
         error: result.error,
       }
       await appendRun(realRun)
+      if (realRun.status === "complete" && realRun.castformRunId) {
+        await ensureHostedModelVersion(realRun, result.modelName)
+      }
       await appendProviderLog({
         projectId,
         runId: realRun.id,
@@ -449,6 +506,33 @@ export async function createCastformRun(projectId: string, mode: CastformRunMode
     message: "Mock Castform run queued.",
   })
   return run
+}
+
+export async function maybeAutoLaunchCastformRun(projectId: string) {
+  const state = await getCastformState(projectId)
+
+  if (!state) {
+    return null
+  }
+
+  const alreadyStarted = state.runs.some(
+    (run) => run.mode === "real" && run.status !== "blocked" && run.status !== "failed"
+  )
+
+  if (alreadyStarted) {
+    return null
+  }
+
+  if (
+    !state.config.autoLaunchEnabled ||
+    !state.config.realRunsEnabled ||
+    !state.config.hasApiKey ||
+    !state.readiness.readyForReal
+  ) {
+    return null
+  }
+
+  return createCastformRun(projectId, "real")
 }
 
 export async function refreshCastformRun(projectId: string, runId: string) {
@@ -508,21 +592,8 @@ export async function refreshCastformRun(projectId: string, runId: string) {
       error: result.error,
     }
     await appendRun(nextRun)
-    if (nextRun.status === "complete" && nextRun.modelEndpoint) {
-      const versions = await readModelVersions(projectId)
-      if (!versions.some((version) => version.sourceRunId === nextRun.id)) {
-        await writeModelVersions(projectId, [
-          {
-            ...mockModelVersion(projectId, nextRun),
-            id: `model_real_${nanoid(10)}`,
-            status: "hosted",
-            castformRunId: nextRun.castformRunId,
-            statusUrl: nextRun.statusUrl,
-            modelEndpoint: nextRun.modelEndpoint,
-          },
-          ...versions,
-        ])
-      }
+    if (nextRun.status === "complete" && nextRun.castformRunId) {
+      await ensureHostedModelVersion(nextRun, result.modelName)
     }
     await appendProviderLog({
       projectId,

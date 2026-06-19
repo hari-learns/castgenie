@@ -603,13 +603,13 @@ Do not launch real training until every source in source_manifest.json has been 
 - data/eval_qa.jsonl: evaluation QA rows
 - data/action_tasks.jsonl: action-task rows
 - rewards/reward_spec.json: reward scaffold
-- src/train.py: inert training entrypoint scaffold
-- src/environment.py: local environment helper scaffold
+- src/train.py: local inspection entrypoint
+- src/environment.py: environment helper scaffold
 - src/rewards.py: reward helper scaffold
 
 ## Running
 
-The Python files intentionally do not import Castform at module load and do not make network calls. They are placeholders for a later Castform SDK integration wave.
+Real Castform launch is controlled by the CastGenie server runner after readiness checks pass. The local Python files remain safe to import and inspect without making network calls.
 `
   const config = `project:
   id: ${JSON.stringify(projectId)}
@@ -642,15 +642,17 @@ ${yamlList(["allowed_public", "user_provided", "licensed"])}
 ${yamlList(["unknown", "blocked"])}
 
 castform:
-  mode: scaffold_only
-  sdk_required: false
-  launch_training: false
+  mode: benchmax_training_ready
+  sdk_required: true
+  launch_training: ${process.env.CASTFORM_AUTO_LAUNCH === "true" ? "auto_when_ready" : "manual_when_ready"}
+  base_model: ${JSON.stringify(process.env.CASTFORM_BASE_MODEL || "Qwen/Qwen3.5-4B")}
+  inference_base_url: ${JSON.stringify(process.env.CASTFORM_INFERENCE_BASE_URL || "https://llm.castform.com/v1")}
 `
-  const trainPy = `"""CastGenie Castform training scaffold.
+  const trainPy = `"""CastGenie Castform workspace inspection entrypoint.
 
-This file is intentionally inert. It does not import the Castform SDK at module
-load and does not make network calls. Wire it to a real Castform training run in
-a later integration wave after source permissions are reviewed.
+The server-side Castform runner performs the real benchmax upload and launch
+after source-readiness checks pass. This file is safe to run locally for a quick
+workspace summary.
 """
 
 from pathlib import Path
@@ -660,9 +662,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main() -> None:
-    print("CastGenie scaffold only.")
     print(f"Workspace: {ROOT}")
-    print("Review source permissions before any real training run.")
+    print("Real training is launched by CastGenie after readiness checks pass.")
 
 
 if __name__ == "__main__":
@@ -683,7 +684,7 @@ def describe() -> dict:
         "root": str(ROOT),
         "data_dir": str(DATA_DIR),
         "reward_spec": str(REWARD_SPEC),
-        "mode": "scaffold_only",
+        "mode": "benchmax_training_ready",
     }
 `
   const rewardsPy = `"""Reward helpers for the CastGenie scaffold."""

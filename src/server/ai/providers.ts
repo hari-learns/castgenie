@@ -1,5 +1,6 @@
 import type { ActionTemplate } from "@/types/actions"
 import type { ChatMessage } from "@/types/artifacts"
+import type { ModelVersion } from "@/types/castform"
 import type {
   ActionRequestInput,
   AssistantResponse,
@@ -13,6 +14,8 @@ type ChatProviderInput = {
   message: string
   history: ChatMessage[]
   retrieval: RetrievalResult
+  hostedModel?: ModelVersion
+  preview?: boolean
 }
 
 type ActionProviderInput = {
@@ -21,6 +24,8 @@ type ActionProviderInput = {
   action: ActionTemplate
   input: ActionRequestInput
   retrieval: RetrievalResult
+  hostedModel?: ModelVersion
+  preview?: boolean
 }
 
 function citationsFrom(retrieval: RetrievalResult) {
@@ -218,7 +223,87 @@ function shouldUseGemini() {
   return Boolean(process.env.GEMINI_API_KEY)
 }
 
+async function castformRequest(prompt: string, modelVersion: ModelVersion) {
+  const apiKey = process.env.CASTFORM_API_KEY
+  const baseUrl =
+    modelVersion.modelEndpoint ||
+    process.env.CASTFORM_INFERENCE_BASE_URL ||
+    "https://llm.castform.com/v1"
+  const model = modelVersion.modelName
+
+  if (!apiKey) {
+    throw new Error("CASTFORM_API_KEY is not configured")
+  }
+
+  if (!model) {
+    throw new Error("Castform hosted model name is missing")
+  }
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 30_000)
+
+  try {
+    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: prompt }],
+      }),
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "")
+      throw new Error(`Castform inference failed with ${response.status}: ${text.slice(0, 300)}`)
+    }
+
+    const payload = (await response.json()) as {
+      choices?: Array<{
+        message?: {
+          content?: string
+        }
+      }>
+    }
+    const content = payload.choices?.[0]?.message?.content?.trim()
+
+    if (!content) {
+      throw new Error("Castform inference response did not include content")
+    }
+
+    return content
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 export async function generateChatAnswer(input: ChatProviderInput): Promise<AssistantResponse> {
+  if (input.hostedModel && !input.preview) {
+    const content = await castformRequest(
+      [
+        "You are the Castform-trained model for this CastGenie project.",
+        "Answer the user using the project source context and cite chunk ids when useful.",
+        "",
+        `Project: ${input.projectName}`,
+        `Domain: ${input.domain}`,
+        `User question: ${input.message}`,
+        "",
+        "Retrieved context:",
+        contextBlock(input.retrieval),
+      ].join("\n"),
+      input.hostedModel
+    )
+
+    return {
+      provider: "castform",
+      content,
+      citations: citationsFrom(input.retrieval),
+    }
+  }
+
   if (!shouldUseGemini()) {
     return mockChat(input)
   }
@@ -249,6 +334,31 @@ export async function generateChatAnswer(input: ChatProviderInput): Promise<Assi
 }
 
 export async function generateActionOutput(input: ActionProviderInput): Promise<AssistantResponse> {
+  if (input.hostedModel && !input.preview) {
+    const content = await castformRequest(
+      [
+        "You are the Castform-trained model for this CastGenie project.",
+        "Produce the requested workflow output using the project source context. Cite chunk ids.",
+        "",
+        `Project: ${input.projectName}`,
+        `Domain: ${input.domain}`,
+        `Action: ${input.action.label}`,
+        `Output format: ${input.action.outputFormat}`,
+        `Input: ${JSON.stringify(input.input)}`,
+        "",
+        "Retrieved context:",
+        contextBlock(input.retrieval),
+      ].join("\n"),
+      input.hostedModel
+    )
+
+    return {
+      provider: "castform",
+      content,
+      citations: citationsFrom(input.retrieval),
+    }
+  }
+
   if (!shouldUseGemini()) {
     return mockAction(input)
   }
@@ -281,5 +391,6 @@ export async function generateActionOutput(input: ActionProviderInput): Promise<
 }
 
 export function providerLabel(provider: ProviderName) {
-  return provider === "gemini" ? "Gemini" : "Mock local"
+  if (provider === "castform") return "Castform"
+  return provider === "gemini" ? "Gemini preview" : "Mock preview"
 }

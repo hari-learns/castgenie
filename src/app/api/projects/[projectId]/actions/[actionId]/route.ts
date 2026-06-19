@@ -9,6 +9,7 @@ import {
   readProjectArtifacts,
 } from "@/lib/storage"
 import { generateActionOutput } from "@/server/ai/providers"
+import { getHostedModelVersion } from "@/server/castform/runs"
 import type { ActionTrace } from "@/types/traces"
 
 const actionSchema = z.object({
@@ -16,6 +17,7 @@ const actionSchema = z.object({
   difficulty: z.enum(["easy", "medium", "hard"]).optional(),
   count: z.coerce.number().int().min(1).max(8).optional(),
   instructions: z.string().trim().max(2000).optional(),
+  preview: z.boolean().optional(),
 })
 
 type RouteProps = {
@@ -47,6 +49,18 @@ export async function POST(request: Request, { params }: RouteProps) {
   }
 
   const artifacts = await readProjectArtifacts(projectId)
+  const hostedModel = await getHostedModelVersion(projectId)
+
+  if (!hostedModel && !parsed.data.preview) {
+    return NextResponse.json(
+      {
+        error:
+          "No hosted Castform model is ready yet. Use preview mode or wait for Castform training to complete.",
+      },
+      { status: 409 }
+    )
+  }
+
   const action = artifacts.modelGoal?.generatedActions.find(
     (candidate) => candidate.id === actionId
   )
@@ -78,6 +92,8 @@ export async function POST(request: Request, { params }: RouteProps) {
     action,
     input: parsed.data,
     retrieval,
+    hostedModel,
+    preview: Boolean(parsed.data.preview),
   })
   const traceId = `action_${nanoid(10)}`
   const trace: ActionTrace = {
