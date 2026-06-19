@@ -61,6 +61,71 @@ function inferredAllowedDomains(input: WebDiscoveryInput) {
   return []
 }
 
+function needsFullTextContent(prompt: string) {
+  const normalized = prompt.toLowerCase()
+  return [
+    "sebi",
+    "lodr",
+    "compliance officer",
+    "regulation",
+    "regulatory",
+    "compliance",
+    "policy",
+    "law",
+    "legal",
+    "statute",
+  ].some((term) => normalized.includes(term))
+}
+
+function relevantTextTerms(plan: WebSearchPlan, title: string) {
+  const combined = `${title} ${plan.queries.join(" ")}`.toLowerCase()
+  const terms = new Set<string>()
+
+  if (combined.includes("sebi") || combined.includes("lodr")) {
+    terms.add("regulation 6")
+    terms.add("compliance officer")
+    terms.add("obligations of compliance officer")
+    terms.add("qualified company secretary")
+    terms.add("listing obligations and disclosure requirements")
+  }
+
+  if (combined.includes("compliance")) {
+    terms.add("non-compliance")
+    terms.add("compliance")
+  }
+
+  return Array.from(terms)
+}
+
+function boundedSearchText(text: string, plan: WebSearchPlan, title: string) {
+  const maxCharacters = 18000
+  if (text.length <= maxCharacters) return text
+
+  const normalized = text.toLowerCase()
+  const terms = relevantTextTerms(plan, title)
+  const windows: string[] = []
+  const seenStarts = new Set<number>()
+
+  for (const term of terms) {
+    let index = normalized.indexOf(term)
+    let guard = 0
+    while (index !== -1 && guard < 5 && windows.join("\n\n").length < maxCharacters) {
+      const start = Math.max(0, index - 2500)
+      const end = Math.min(text.length, index + 4500)
+      const bucket = Math.floor(start / 1000)
+      if (!seenStarts.has(bucket)) {
+        seenStarts.add(bucket)
+        windows.push(text.slice(start, end).trim())
+      }
+      index = normalized.indexOf(term, index + term.length)
+      guard += 1
+    }
+  }
+
+  const body = windows.length > 0 ? windows.join("\n\n--- Relevant excerpt ---\n\n") : text.slice(0, maxCharacters)
+  return `${body.slice(0, maxCharacters)}\n\n[Truncated by CastGenie local demo.]`
+}
+
 function queryPlan(input: WebDiscoveryInput): WebSearchPlan {
   const prompt = input.prompt.toLowerCase()
   const queries =
@@ -76,9 +141,9 @@ function queryPlan(input: WebDiscoveryInput): WebSearchPlan {
           ]
         : prompt.includes("sebi")
           ? [
-              "SEBI regulations official circulars compliance assessment",
-              "SEBI master circular compliance obligations official",
-              "SEBI listing obligations disclosure requirements official",
+              "SEBI LODR Regulation 6 compliance officer qualification official pdf",
+              "SEBI LODR Regulations 2015 official pdf regulation 6 compliance officer",
+              "SEBI listing obligations disclosure requirements regulations official pdf",
             ]
           : prompt.includes("compliance") ||
               prompt.includes("regulation") ||
@@ -99,6 +164,7 @@ function queryPlan(input: WebDiscoveryInput): WebSearchPlan {
     provider: input.mockMode || !process.env.EXA_API_KEY ? "mock" : "exa",
     queries: queries.slice(0, 3),
     allowedDomains: inferredAllowedDomains(input),
+    contentMode: needsFullTextContent(input.prompt) ? "text" : "highlights",
     maxResults: Math.max(1, Math.min(input.maxSources, Number(process.env.MAX_SOURCES ?? 12))),
     generatedAt: now(),
     warnings: [],
@@ -170,6 +236,14 @@ async function exaResults(plan: WebSearchPlan): Promise<WebDiscoveryResult[]> {
   if (!apiKey) return []
 
   const results: WebDiscoveryResult[] = []
+  const contents =
+    plan.contentMode === "text"
+      ? {
+          text: true,
+        }
+      : {
+          highlights: true,
+        }
 
   for (const query of plan.queries) {
     const response = await fetch("https://api.exa.ai/search", {
@@ -183,9 +257,7 @@ async function exaResults(plan: WebSearchPlan): Promise<WebDiscoveryResult[]> {
         type: "auto",
         includeDomains: plan.allowedDomains.length ? plan.allowedDomains : undefined,
         numResults: Math.min(plan.maxResults, 10),
-        contents: {
-          highlights: true,
-        },
+        contents,
       }),
     })
 
@@ -198,6 +270,7 @@ async function exaResults(plan: WebSearchPlan): Promise<WebDiscoveryResult[]> {
         title?: string
         url?: string
         highlights?: string[]
+        text?: string
       }>
     }
 
@@ -205,6 +278,10 @@ async function exaResults(plan: WebSearchPlan): Promise<WebDiscoveryResult[]> {
       if (!item.url || results.some((result) => result.url === item.url)) continue
       const domain = domainFromUrl(item.url)
       const allowedDomainMatch = domainMatches(domain, plan.allowedDomains)
+      const text = item.text?.trim()
+      const highlights = item.highlights?.join("\n\n").trim()
+      const extractedText = text || highlights
+      const boundedText = extractedText ? boundedSearchText(extractedText, plan, item.title || item.url) : extractedText
       results.push({
         id: `web_result_${String(results.length + 1).padStart(3, "0")}`,
         query,
@@ -215,7 +292,7 @@ async function exaResults(plan: WebSearchPlan): Promise<WebDiscoveryResult[]> {
         selected: allowedDomainMatch || plan.allowedDomains.length === 0,
         allowedDomainMatch,
         permissionStatus: allowedDomainMatch ? "allowed_public" : "unknown",
-        text: item.highlights?.join("\n\n"),
+        text: boundedText,
         warning: allowedDomainMatch
           ? undefined
           : "Domain was not explicitly allow-listed; review permission before training.",

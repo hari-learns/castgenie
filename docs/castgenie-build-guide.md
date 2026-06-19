@@ -1466,7 +1466,8 @@ Exa Search:
 - Inputs: query, `type`, `includeDomains`, `numResults`, content options
 - Default Wave 8 search type: `auto`
 - Default Wave 8 content mode: `contents.highlights=true`
-- Output: ranked web results with title, URL, and highlights/snippet content when available
+- Legal, regulatory, and compliance prompts may use Exa text content for deeper official-source context
+- Output: ranked web results with title, URL, and highlights/snippet or text content when available
 
 Default Exa request shape:
 
@@ -1483,6 +1484,8 @@ Default Exa request shape:
 ```
 
 Keep Wave 8 on raw `results` plus highlights. Do not use Exa `outputSchema`, synthesized search, or deep search by default; those are later enhancements for structured enrichment.
+
+Exception: for official legal/regulatory source discovery, CastGenie may request text content from `/search` because snippet-level highlights are too weak for grounded compliance answers.
 
 Firecrawl Scrape:
 

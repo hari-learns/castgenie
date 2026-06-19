@@ -16,6 +16,7 @@ export type WebSearchPlan = {
   provider: WebProviderName
   queries: string[]
   allowedDomains: string[]
+  contentMode: "highlights" | "text"
   maxResults: number
   generatedAt: string
   warnings: string[]
