@@ -223,7 +223,6 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
                       <textarea
                         className="min-h-72 resize-none rounded-lg border border-input bg-background px-4 py-3 text-sm leading-6 shadow-xs outline-none"
                         defaultValue={project.prompt}
-                        readOnly
                         aria-label="Original model request"
                       />
                       <div className="grid gap-3 sm:grid-cols-3">
