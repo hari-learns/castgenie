@@ -164,6 +164,55 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             ))}
           </section>
 
+          <Card>
+            <CardHeader>
+              <CardTitle>Import summary</CardTitle>
+              <CardDescription>
+                Normalized source import metadata from the selected adapter.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Adapter</p>
+                <p className="font-medium">
+                  {artifacts.importSummary?.adapterLabel ?? "No import summary"}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Strategy</p>
+                <p className="font-medium">
+                  {artifacts.importSummary?.strategy ?? "Not available"}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Chapters/topics</p>
+                <p className="font-medium">
+                  {artifacts.importSummary
+                    ? `${artifacts.importSummary.chapterCount} / ${artifacts.importSummary.topicCount}`
+                    : "0 / 0"}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Imported questions</p>
+                <p className="font-medium">
+                  {artifacts.importSummary?.questionCount ?? 0}
+                </p>
+              </div>
+              {artifacts.importSummary?.warnings.length ? (
+                <div className="md:col-span-2 xl:col-span-4">
+                  <p className="text-sm text-muted-foreground">Warnings</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {artifacts.importSummary.warnings.map((warning) => (
+                      <Badge key={warning} variant="secondary">
+                        {warning}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+
           <section className="grid gap-4 lg:grid-cols-[1fr_22rem]">
             <Card>
               <CardHeader>
@@ -324,6 +373,56 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
               {project.domainSpec?.sourcePolicy.permissionNote}
             </AlertDescription>
           </Alert>
+          <section className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Permission summary</CardTitle>
+                <CardDescription>
+                  Permission status normalized from import metadata.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-wrap gap-2">
+                {Object.entries(
+                  artifacts.importSummary?.permissionCounts ?? {}
+                ).length ? (
+                  Object.entries(
+                    artifacts.importSummary?.permissionCounts ?? {}
+                  ).map(([status, count]) => (
+                    <Badge key={status} variant="secondary">
+                      {status}: {count}
+                    </Badge>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No permission summary generated yet.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Quality tags</CardTitle>
+                <CardDescription>
+                  Tags preserved for later eval and reward-quality waves.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-wrap gap-2">
+                {artifacts.qualityTags.length ? (
+                  artifacts.qualityTags.slice(0, 12).flatMap((record) =>
+                    record.tags.map((tag) => (
+                      <Badge key={`${record.nodeId}-${tag}`} variant="outline">
+                        {record.nodeId}: {tag}
+                      </Badge>
+                    ))
+                  )
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No quality tags generated yet.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </section>
           <Card>
             <CardHeader>
               <CardTitle>Source manifest</CardTitle>
@@ -360,6 +459,24 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             title="source_manifest.json"
             content={artifacts.sourceManifestPreview}
           />
+          <div className="grid gap-4 lg:grid-cols-2">
+            <PreviewBlock
+              title="imports/import_summary.json"
+              content={artifacts.importSummaryPreview}
+            />
+            <PreviewBlock
+              title="imports/permissions.json"
+              content={artifacts.permissionsPreview}
+            />
+            <PreviewBlock
+              title="imports/quality_tags.json"
+              content={artifacts.qualityTagsPreview}
+            />
+            <PreviewBlock
+              title="imports/adapter_trace.json"
+              content={artifacts.adapterTracePreview}
+            />
+          </div>
         </TabsContent>
 
         <TabsContent value="Corpus" className="flex flex-col gap-4">
@@ -479,7 +596,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             <CardHeader>
               <CardTitle>Assistant chat</CardTitle>
               <CardDescription>
-                Working chat arrives in Wave 4. This layout now has real corpus
+                Working chat arrives in Wave 5. This layout now has real corpus
                 and dataset files behind it.
               </CardDescription>
             </CardHeader>
@@ -509,8 +626,8 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             <ArchiveIcon aria-hidden="true" />
             <AlertTitle>Castform export note</AlertTitle>
             <AlertDescription>
-              Castform export scaffolds are added in Wave 5. Wave 2 verifies
-              corpus and dataset artifacts exist first.
+              Castform export scaffolds are added in Wave 6. Current waves
+              verify corpus, import metadata, and dataset artifacts first.
             </AlertDescription>
           </Alert>
           <div className="grid gap-4 lg:grid-cols-2">

@@ -1,0 +1,156 @@
+{
+  "syllabus": {
+    "exam": "CA Intermediate",
+    "version": "Synthetic CastGenie Fixture",
+    "source_url": "fixture://castgenie/wire-neurons-shaped/ca-syllabus",
+    "papers": [
+      {
+        "number": 1,
+        "name": "Advanced Accounting",
+        "group": 1,
+        "chapters": [
+          {
+            "id": "p1-ch1",
+            "name": "Accounting Standards Overview",
+            "unit_number": 1,
+            "pdf_url": "fixture://castgenie/ca/p1-ch1.pdf"
+          },
+          {
+            "id": "p1-ch2",
+            "name": "Consolidation Basics",
+            "unit_number": 2,
+            "pdf_url": "fixture://castgenie/ca/p1-ch2.pdf"
+          }
+        ]
+      },
+      {
+        "number": 3,
+        "name": "Taxation",
+        "group": 1,
+        "chapters": [
+          {
+            "id": "p3-ch1",
+            "name": "Residential Status",
+            "unit_number": 1,
+            "pdf_url": "fixture://castgenie/ca/p3-ch1.pdf"
+          }
+        ]
+      }
+    ]
+  },
+  "enriched_chapters": {
+    "p1-ch1": {
+      "id": "p1-ch1",
+      "name": "Accounting Standards Overview",
+      "pdf_url": "fixture://castgenie/ca/p1-ch1.pdf",
+      "unit_number": 1,
+      "paper_number": 1,
+      "paper_name": "Advanced Accounting",
+      "status": "enriched",
+      "content_profile": {
+        "topics": ["purpose of accounting standards", "disclosure discipline"],
+        "sub_topics": ["recognition", "measurement", "presentation"],
+        "key_concepts": ["consistency", "prudence", "materiality"],
+        "methods_formulae": ["standard applicability checklist"],
+        "icai_treatment": "Explain concept first, then test with a practical disclosure scenario."
+      }
+    },
+    "p1-ch2": {
+      "id": "p1-ch2",
+      "name": "Consolidation Basics",
+      "pdf_url": "fixture://castgenie/ca/p1-ch2.pdf",
+      "unit_number": 2,
+      "paper_number": 1,
+      "paper_name": "Advanced Accounting",
+      "status": "enriched",
+      "content_profile": {
+        "topics": ["holding company", "subsidiary company", "pre-acquisition profits"],
+        "sub_topics": ["capital reserve", "minority interest", "goodwill"],
+        "key_concepts": ["date of acquisition", "share of profit", "inter-company adjustment"],
+        "methods_formulae": ["goodwill = cost of control minus net assets acquired"],
+        "icai_treatment": "Require stepwise working notes before final consolidated balance sheet values."
+      }
+    },
+    "p3-ch1": {
+      "id": "p3-ch1",
+      "name": "Residential Status",
+      "pdf_url": "fixture://castgenie/ca/p3-ch1.pdf",
+      "unit_number": 1,
+      "paper_number": 3,
+      "paper_name": "Taxation",
+      "status": "enriched",
+      "content_profile": {
+        "topics": ["basic residence conditions", "additional residence conditions"],
+        "sub_topics": ["resident", "non-resident", "not ordinarily resident"],
+        "key_concepts": ["stay in India", "scope of total income"],
+        "methods_formulae": ["182-day test", "60-day plus 365-day test"],
+        "icai_treatment": "Use facts table first, then classify status and income scope."
+      }
+    }
+  },
+  "papers": [
+    {
+      "meta": {
+        "attempt": "Synthetic May 2026",
+        "subject": "Advanced Accounting",
+        "paper_number": 1,
+        "scheme": "fixture",
+        "source_url": "fixture://castgenie/ca/past-paper-advanced-accounting",
+        "label": "synthetic-advanced-accounting"
+      },
+      "questions": [
+        {
+          "q": "1a",
+          "marks": 7,
+          "type": "practical",
+          "text": "Prepare working notes for goodwill when a holding company acquires shares after profits have accumulated.",
+          "concepts": ["consolidation", "goodwill", "pre-acquisition profits"],
+          "answer_format": "working_notes",
+          "answer_summary": "Separate pre-acquisition and post-acquisition profits before computing cost of control."
+        },
+        {
+          "q": "2b",
+          "marks": 5,
+          "type": "theory",
+          "text": "Explain why material accounting policies must be disclosed consistently.",
+          "concepts": ["accounting standards", "disclosure", "materiality"],
+          "answer_format": "short_note",
+          "answer_summary": "Policy disclosure improves comparability and prevents misleading presentation."
+        }
+      ]
+    },
+    {
+      "meta": {
+        "attempt": "Synthetic May 2026",
+        "subject": "Taxation",
+        "paper_number": 3,
+        "scheme": "fixture",
+        "source_url": "fixture://castgenie/ca/past-paper-taxation",
+        "label": "synthetic-taxation"
+      },
+      "questions": [
+        {
+          "q": "3a",
+          "marks": 6,
+          "type": "case_based",
+          "text": "Determine residential status from a fact pattern containing days stayed in India across current and previous years.",
+          "concepts": ["residential status", "basic conditions", "scope of income"],
+          "answer_format": "classification_with_reason",
+          "answer_summary": "Apply day-count tests in sequence and state the consequence for taxable income."
+        }
+      ]
+    }
+  ],
+  "quality_tags": [
+    {
+      "nodeId": "p1-ch2",
+      "domain": "CA",
+      "tags": ["high-risk", "formula-heavy", "exam-practical"]
+    },
+    {
+      "nodeId": "p3-ch1",
+      "domain": "CA",
+      "tags": ["tax", "case-based", "rule-heavy"]
+    }
+  ]
+}

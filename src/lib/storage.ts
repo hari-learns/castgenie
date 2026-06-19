@@ -6,6 +6,12 @@ import { projectArtifactPath, projectRoot, projectsRoot } from "@/lib/paths"
 import type { ActionTask } from "@/types/actions"
 import type { ChunkRecord, QAPair, SourceRecord } from "@/types/artifacts"
 import type { BuildJob, BuildLogRecord } from "@/types/jobs"
+import type {
+  AdapterTraceRecord,
+  ImportSummary,
+  PermissionRecord,
+  QualityTagRecord,
+} from "@/types/imports"
 import type { ModelGoal } from "@/types/model-goal"
 import type { SourcePlan, TrainingPlan } from "@/types/plans"
 import type { Project } from "@/types/project"
@@ -32,11 +38,19 @@ export type ProjectArtifacts = {
   trainingPlan?: TrainingPlan
   actionTasks: ActionTask[]
   rewardSpec?: RewardSpec
+  importSummary?: ImportSummary
+  permissions: PermissionRecord[]
+  qualityTags: QualityTagRecord[]
+  adapterTrace: AdapterTraceRecord[]
   modelGoalPreview: string
   sourcePlanPreview: string
   trainingPlanPreview: string
   actionTasksPreview: string
   rewardSpecPreview: string
+  importSummaryPreview: string
+  permissionsPreview: string
+  qualityTagsPreview: string
+  adapterTracePreview: string
 }
 
 type CreateProjectInput = {
@@ -62,10 +76,10 @@ function parseJsonl<T>(content: string): T[] {
 }
 
 function safeArtifactPath(projectId: string, relativePath: string) {
-  const root = projectRoot(projectId)
+  const root = path.resolve(projectRoot(projectId))
   const resolved = path.resolve(root, relativePath)
 
-  if (!resolved.startsWith(path.resolve(root))) {
+  if (resolved !== root && !resolved.startsWith(`${root}${path.sep}`)) {
     throw new Error("Artifact path escapes project root")
   }
 
@@ -293,6 +307,14 @@ export async function readProjectArtifacts(
     actionTasksPreview,
     rewardSpecJson,
     rewardSpecPreview,
+    importSummaryJson,
+    permissionsJson,
+    qualityTagsJson,
+    adapterTraceJson,
+    importSummaryPreview,
+    permissionsPreview,
+    qualityTagsPreview,
+    adapterTracePreview,
   ] = await Promise.all([
     readTextIfExists(projectArtifactPath(projectId, "source_manifest.json")),
     readTextIfExists(projectArtifactPath(projectId, "chunks.jsonl")),
@@ -316,6 +338,14 @@ export async function readProjectArtifacts(
     readArtifactPreview(projectId, "datasets/action_tasks.jsonl"),
     readTextIfExists(projectArtifactPath(projectId, "rewards", "reward_spec.json")),
     readArtifactPreview(projectId, "rewards/reward_spec.json"),
+    readTextIfExists(projectArtifactPath(projectId, "imports", "import_summary.json")),
+    readTextIfExists(projectArtifactPath(projectId, "imports", "permissions.json")),
+    readTextIfExists(projectArtifactPath(projectId, "imports", "quality_tags.json")),
+    readTextIfExists(projectArtifactPath(projectId, "imports", "adapter_trace.json")),
+    readArtifactPreview(projectId, "imports/import_summary.json"),
+    readArtifactPreview(projectId, "imports/permissions.json"),
+    readArtifactPreview(projectId, "imports/quality_tags.json"),
+    readArtifactPreview(projectId, "imports/adapter_trace.json"),
   ])
   const modelGoal = modelGoalJson
     ? (JSON.parse(modelGoalJson) as ModelGoal)
@@ -328,6 +358,9 @@ export async function readProjectArtifacts(
     : undefined
   const rewardSpec = rewardSpecJson
     ? (JSON.parse(rewardSpecJson) as RewardSpec)
+    : undefined
+  const importSummary = importSummaryJson
+    ? (JSON.parse(importSummaryJson) as ImportSummary)
     : undefined
 
   return {
@@ -346,10 +379,24 @@ export async function readProjectArtifacts(
     trainingPlan,
     actionTasks: parseJsonl<ActionTask>(actionTasksJsonl),
     rewardSpec,
+    importSummary,
+    permissions: permissionsJson
+      ? (JSON.parse(permissionsJson) as PermissionRecord[])
+      : [],
+    qualityTags: qualityTagsJson
+      ? (JSON.parse(qualityTagsJson) as QualityTagRecord[])
+      : [],
+    adapterTrace: adapterTraceJson
+      ? (JSON.parse(adapterTraceJson) as AdapterTraceRecord[])
+      : [],
     modelGoalPreview: modelGoalPreview.content,
     sourcePlanPreview: sourcePlanPreview.content,
     trainingPlanPreview: trainingPlanPreview.content,
     actionTasksPreview: actionTasksPreview.content,
     rewardSpecPreview: rewardSpecPreview.content,
+    importSummaryPreview: importSummaryPreview.content,
+    permissionsPreview: permissionsPreview.content,
+    qualityTagsPreview: qualityTagsPreview.content,
+    adapterTracePreview: adapterTracePreview.content,
   }
 }

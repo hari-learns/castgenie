@@ -9,11 +9,18 @@ import {
   writeBuildJob,
   writeProject,
 } from "@/lib/storage"
+import { runDomainImport } from "@/server/imports/domain-import"
 import { planProject, type PlannedProject } from "@/server/pipeline/mock-planner"
 import type { ActionTask } from "@/types/actions"
 import type { ChunkRecord, DocumentRecord, QAPair, SourceRecord } from "@/types/artifacts"
 import type { BuildJob } from "@/types/jobs"
-import type { DomainGraphNode } from "@/types/imports"
+import type {
+  AdapterTraceRecord,
+  DomainGraphNode,
+  ImportSummary,
+  PermissionRecord,
+  QualityTagRecord,
+} from "@/types/imports"
 import type { BuildStep, Project, ProjectStatus } from "@/types/project"
 import type { RewardSpec } from "@/types/rewards"
 
@@ -38,8 +45,8 @@ const stepDefinitions: Array<{
   {
     id: "ingesting_seed_documents",
     status: "importing_sources",
-    label: "Ingesting mock documents",
-    description: "Generate deterministic seed documents for the inferred domain.",
+    label: "Importing domain sources",
+    description: "Select an import adapter and normalize domain source records.",
   },
   {
     id: "normalizing_domain",
@@ -89,14 +96,14 @@ type GeneratedBundle = {
   practiceQuestions: string
   actionTasks: ActionTask[]
   rewardSpec: RewardSpec
+  importSummary: ImportSummary
+  permissions: PermissionRecord[]
+  qualityTags: QualityTagRecord[]
+  adapterTrace: AdapterTraceRecord[]
 }
 
 function now() {
   return new Date().toISOString()
-}
-
-function estimateTokens(text: string) {
-  return Math.ceil(text.split(/\s+/).filter(Boolean).length * 1.3)
 }
 
 async function markStep(
@@ -145,7 +152,7 @@ export async function runBuildJob(projectId: string) {
 
   try {
     const plan = planProject({ projectId, prompt: project.prompt })
-    const generated = generateBundle(projectId, plan)
+    const generated = await generateBundle(projectId, plan)
     const steps: BuildStep[] = []
 
     for (const [index, step] of stepDefinitions.entries()) {
@@ -190,6 +197,10 @@ export async function runBuildJob(projectId: string) {
       "model_goal.json",
       "source_plan.json",
       "training_plan.json",
+      "imports/import_summary.json",
+      "imports/permissions.json",
+      "imports/quality_tags.json",
+      "imports/adapter_trace.json",
       "domain_graph.json",
       "source_manifest.json",
       "sources.jsonl",
@@ -255,6 +266,10 @@ async function writeGeneratedArtifacts(
   await writeArtifactJson(projectId, "model_goal.json", plan.modelGoal)
   await writeArtifactJson(projectId, "source_plan.json", plan.sourcePlan)
   await writeArtifactJson(projectId, "training_plan.json", plan.trainingPlan)
+  await writeArtifactJson(projectId, "imports/import_summary.json", generated.importSummary)
+  await writeArtifactJson(projectId, "imports/permissions.json", generated.permissions)
+  await writeArtifactJson(projectId, "imports/quality_tags.json", generated.qualityTags)
+  await writeArtifactJson(projectId, "imports/adapter_trace.json", generated.adapterTrace)
   await writeArtifactJson(projectId, "domain_graph.json", generated.domainGraph)
   await writeArtifactJson(projectId, "source_manifest.json", generated.sources)
   await writeArtifactJson(projectId, "rewards/reward_spec.json", generated.rewardSpec)
@@ -276,21 +291,31 @@ async function writeGeneratedArtifacts(
   )
 }
 
-function generateBundle(projectId: string, plan: PlannedProject): GeneratedBundle {
-  const documents = makeDocuments(projectId, plan)
-  const sources = documents.map((document): SourceRecord => ({
-    id: document.sourceId,
-    title: document.title,
-    url: `seed://${projectId}/${document.id}`,
-    provider: "seed",
-    domain: "castgenie.local",
-    fetchedAt: now(),
-    permissionStatus: "user_provided",
-    notes: "Synthetic Wave 3 mock data. Replace with public, licensed, or user-provided sources before production training.",
-  }))
-  const chunks = makeChunks(documents)
-  const domainGraph = makeDomainGraph(plan, chunks)
-  const trainQa = makeQaPairs(chunks, 18, "train")
+async function generateBundle(projectId: string, plan: PlannedProject): Promise<GeneratedBundle> {
+  const imported = await runDomainImport({
+    projectId,
+    prompt: plan.modelGoal.userIntent,
+    domainKind: plan.kind,
+    sourceKinds: plan.sourcePlan.requiredSourceKinds,
+    mockMode: process.env.MOCK_MODE !== "false",
+    limits: {
+      maxSources: Number(process.env.MAX_SOURCES ?? 12),
+      maxChunks: Number(process.env.MAX_CHUNKS ?? 300),
+      maxQaPairs: Number(process.env.MAX_QA_PAIRS ?? 60),
+    },
+  })
+  const sources = imported.sources
+  const documents = imported.documents
+  const chunks = (imported.chunks?.length ? imported.chunks : makeChunks(documents)).slice(
+    0,
+    Number(process.env.MAX_CHUNKS ?? 300)
+  )
+  const domainGraph = makeDomainGraph(plan, chunks, imported.domainGraph)
+  const generatedTrainQa = makeQaPairs(chunks, 18, "train")
+  const trainQa = [
+    ...attachQuestionChunks(imported.questions, chunks),
+    ...generatedTrainQa,
+  ].slice(0, 18)
   const evalQa = makeQaPairs(chunks.slice().reverse(), 8, "eval")
   const practiceQuestions = chunks
     .slice(0, 12)
@@ -309,72 +334,11 @@ function generateBundle(projectId: string, plan: PlannedProject): GeneratedBundl
     practiceQuestions,
     actionTasks,
     rewardSpec,
+    importSummary: imported.summary,
+    permissions: imported.permissions,
+    qualityTags: imported.qualityTags,
+    adapterTrace: imported.adapterTrace,
   }
-}
-
-function makeDocuments(projectId: string, plan: PlannedProject): DocumentRecord[] {
-  const bodies = getDocumentBodies(plan)
-
-  return bodies.map((document, index) => {
-    const sourceNumber = String(index + 1).padStart(3, "0")
-    const text = `# ${document.title}\n\n${document.body}\n\n## Source note\nSynthetic Wave 3 material for CastGenie prototype; replace with licensed, official, or user-provided sources for production.`
-
-    return {
-      id: `doc_${sourceNumber}`,
-      sourceId: `source_${sourceNumber}`,
-      title: document.title,
-      text,
-      markdownPath: `documents/${projectId}_${sourceNumber}.md`,
-      tokenEstimate: estimateTokens(text),
-    }
-  })
-}
-
-function getDocumentBodies(plan: PlannedProject) {
-  if (plan.kind === "owasp_security") {
-    return [
-      {
-        title: "OWASP-oriented code review workflow",
-        body: "## Key concepts\nA security model needs evidence from code, framework behavior, and known vulnerability classes.\n\n## Review pattern\nIdentify inputs, trust boundaries, sinks, authentication checks, authorization checks, and output encoding.\n\n## Common mistakes\nDo not claim exploitability without code evidence. Distinguish suspected risk from confirmed vulnerability.",
-      },
-      {
-        title: "Injection and broken access control examples",
-        body: "## Key concepts\nInjection appears when untrusted input reaches interpreters without parameterization. Broken access control appears when object-level authorization is missing.\n\n## Fix pattern\nUse parameterized APIs, centralized authorization checks, least privilege, and regression tests.\n\n## Common mistakes\nA route-level login check is not the same as object-level authorization.",
-      },
-      {
-        title: "Secure remediation explanation format",
-        body: "## Key concepts\nA useful security assistant should explain risk, affected code path, severity, reproduction preconditions, and concrete fix.\n\n## Output pattern\nSummarize finding, cite code/source context, explain impact, propose patch, and include a test case.\n\n## Common mistakes\nAvoid generic security advice that is not tied to the inspected codebase.",
-      },
-    ]
-  }
-
-  if (plan.kind === "ca_edtech") {
-    return [
-      {
-        title: "CA lesson generation from syllabus nodes",
-        body: "## Key concepts\nAn ed-tech model should map lessons to syllabus nodes, concepts, examples, and exam-style outcomes.\n\n## Lesson pattern\nStart with the concept, give a plain explanation, show a worked example, call out a common mistake, and end with practice.\n\n## Common mistakes\nLessons should not drift away from the source syllabus or invent authoritative rules without citations.",
-      },
-      {
-        title: "Question paper and MCQ generation",
-        body: "## Key concepts\nQuestion generation should balance marks, difficulty, topic coverage, and answer format.\n\n## Paper pattern\nCreate sections, marks, question type, expected answer outline, and concept tags.\n\n## Common mistakes\nPast-paper-like does not mean copying past papers. Generate similar structure from licensed or user-provided patterns.",
-      },
-      {
-        title: "Answer key and marking scheme generation",
-        body: "## Key concepts\nA useful answer key gives final answer, steps, marks allocation, and source-grounded explanation.\n\n## Marking pattern\nAllocate marks to concept identification, calculation setup, journal-entry logic, and final conclusion.\n\n## Common mistakes\nDo not omit the reasoning steps that a learner needs to self-correct.",
-      },
-    ]
-  }
-
-  return [
-    {
-      title: "Custom expert model source grounding",
-      body: "## Key concepts\nA domain model should answer from provided material, expose its uncertainty, and cite relevant source chunks.\n\n## Workflow\nPlan the domain, ingest source material, chunk the corpus, generate train and eval rows, then expose useful actions.\n\n## Common mistakes\nDo not treat a vague prompt as permission to invent unsupported facts.",
-    },
-    {
-      title: "Custom domain action generation",
-      body: "## Key concepts\nActions should reflect the user's intended workflow rather than generic chat only.\n\n## Workflow\nDerive action templates from the target user, capability list, and source material.\n\n## Common mistakes\nDo not hardcode CA-specific actions into unrelated domains.",
-    },
-  ]
 }
 
 function makeChunks(documents: DocumentRecord[]): ChunkRecord[] {
@@ -410,7 +374,34 @@ function makeChunks(documents: DocumentRecord[]): ChunkRecord[] {
   return chunks
 }
 
-function makeDomainGraph(plan: PlannedProject, chunks: ChunkRecord[]): DomainGraphNode[] {
+function attachQuestionChunks(questions: QAPair[], chunks: ChunkRecord[]): QAPair[] {
+  if (chunks.length === 0) {
+    return questions
+  }
+
+  return questions.map((question, index) => {
+    const matchedChunk =
+      chunks.find((chunk) =>
+        question.sourceIds.some((sourceId) => sourceId === chunk.sourceId)
+      ) ?? chunks[index % chunks.length]
+
+    return {
+      ...question,
+      sourceIds: question.sourceIds.length
+        ? question.sourceIds
+        : [matchedChunk.sourceId],
+      chunkIds: question.chunkIds.length ? question.chunkIds : [matchedChunk.id],
+    }
+  })
+}
+
+function makeDomainGraph(
+  plan: PlannedProject,
+  chunks: ChunkRecord[],
+  importedNodes: DomainGraphNode[]
+): DomainGraphNode[] {
+  const importedNodeIds = new Set(importedNodes.map((node) => node.id))
+
   return [
     {
       id: "domain-root",
@@ -425,8 +416,11 @@ function makeDomainGraph(plan: PlannedProject, chunks: ChunkRecord[]): DomainGra
       parentId: "domain-root",
       tags: [action.capability, action.outputFormat],
     })),
+    ...importedNodes.filter((node) => node.id !== "domain-root"),
     ...chunks.slice(0, 6).map((chunk): DomainGraphNode => ({
-      id: `topic-${chunk.id}`,
+      id: importedNodeIds.has(`topic-${chunk.id}`)
+        ? `chunk-topic-${chunk.id}`
+        : `topic-${chunk.id}`,
       kind: "topic",
       title: chunk.title,
       parentId: "domain-root",
@@ -436,6 +430,10 @@ function makeDomainGraph(plan: PlannedProject, chunks: ChunkRecord[]): DomainGra
 }
 
 function makeQaPairs(chunks: ChunkRecord[], count: number, type: QAPair["type"]) {
+  if (chunks.length === 0) {
+    return []
+  }
+
   return Array.from({ length: count }, (_, index): QAPair => {
     const chunk = chunks[index % chunks.length]
 

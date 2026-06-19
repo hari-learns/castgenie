@@ -275,7 +275,7 @@ function makePlannedProject(input: {
       requireCitations: true,
       allowUserProvidedDocs: true,
       permissionNote:
-        "Mock Wave 3 data is synthetic. Real projects must use public, licensed, or user-provided material.",
+        "Wave 4 import data is synthetic or user-provided by default. Real projects must use public, licensed, or explicitly permitted material.",
     },
     safetyPolicy: {
       riskLevel: input.riskLevel,
@@ -321,8 +321,9 @@ function makePlannedProject(input: {
         "Synthetic mock data is allowed for prototype demonstration.",
         "Production training requires explicit public, licensed, or user-provided permission.",
       ],
-      strategy: "mock_seed",
-      fallbackStrategy: "Use deterministic synthetic seed documents when external sources or uploads are unavailable.",
+      strategy: input.kind === "ca_edtech" ? "fixture_import" : "mock_seed",
+      fallbackStrategy:
+        "Use deterministic synthetic seed documents when richer imports, external sources, or uploads are unavailable.",
     },
     trainingPlan: {
       id: `training_plan_${input.projectId}`,

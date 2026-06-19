@@ -11,7 +11,12 @@ export type SourcePlan = {
     | "codebase"
   >
   permissionAssumptions: string[]
-  strategy: "mock_seed" | "upload_first" | "search_first" | "codebase_import"
+  strategy:
+    | "mock_seed"
+    | "fixture_import"
+    | "upload_first"
+    | "search_first"
+    | "codebase_import"
   fallbackStrategy: string
 }
 
