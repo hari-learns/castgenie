@@ -10,6 +10,7 @@ CastGenie is a local-first prototype for turning an English model intent into a 
 - Wave 6: artifact browser and Castform-ready ZIP export.
 - Wave 7: real local source intake for TXT, MD, JSON, JSONL, and CSV uploads.
 - Wave 8: automatic web discovery with mock-first Exa/Firecrawl provider adapters.
+- Wave 9: Castform readiness checks, mock training runs, model versions, and opt-in Python launcher.
 
 This is intentionally simple local infrastructure. Local JSON storage is the source of truth for this project.
 
@@ -41,6 +42,10 @@ GEMINI_BASE_URL=https://generativelanguage.googleapis.com
 GEMINI_MODEL=gemini-3.5-flash
 EXA_API_KEY=
 FIRECRAWL_API_KEY=
+CASTFORM_API_KEY=
+CASTFORM_BASE_URL=
+CASTFORM_PYTHON_BIN=python3
+CASTFORM_REAL_RUNS_ENABLED=false
 ```
 
 `MOCK_MODE=true` must work without provider keys. Set provider keys only in `.env.local`; never commit them.
@@ -112,4 +117,10 @@ Each successful build prepares `castform_project/` with:
 - reward spec
 - inert Python scaffolds
 
-The scaffolds do not import Castform at module load and do not make network calls. Real Castform training/hosting is a later wave and requires source-permission review first.
+The scaffolds do not import Castform at module load and do not make network calls. Wave 9 can create mock runs locally and can call a real Castform Python runner only when explicitly configured.
+
+## Castform Runs
+
+Wave 9 adds local readiness checks and mock training runs. Real Castform launch is disabled by default and only appears when `CASTFORM_REAL_RUNS_ENABLED=true`, `CASTFORM_API_KEY`, `CASTFORM_BASE_URL`, and a Python runtime are configured.
+
+The Python runner lives at `scripts/castform_runner.py`. It imports `benchmax` only during an explicit real launch/status check and never logs API keys. Without Castform configuration, the app still uses the local RAG assistant and mock run history.

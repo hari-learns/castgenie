@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/app/page-header"
 import { PageShell } from "@/components/app/page-shell"
 import { StatusBadge } from "@/components/app/status-badge"
 import { ArtifactBrowser } from "@/components/projects/artifact-browser"
+import { CastformRunsPanel } from "@/components/projects/castform-runs-panel"
 import { ProjectAssistant } from "@/components/projects/project-assistant"
 import { ProjectSourceManager } from "@/components/projects/project-source-manager"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -40,6 +41,7 @@ import {
   readProjectArtifacts,
 } from "@/lib/storage"
 import { getArtifactBrowserData } from "@/server/artifacts/project-artifacts"
+import { getCastformState } from "@/server/castform/runs"
 
 export const dynamic = "force-dynamic"
 
@@ -89,6 +91,7 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
   const artifacts = await readProjectArtifacts(project.id)
   const buildJob = await readBuildJob(project.id)
   const buildLogs = await readArtifactPreview(project.id, "logs/build_logs.jsonl")
+  const castformState = await getCastformState(project.id)
   const artifactBrowserData = await getArtifactBrowserData(project.id)
   const metricCards = [
     {
@@ -622,6 +625,12 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         </TabsContent>
 
         <TabsContent value="Castform Export" className="flex flex-col gap-4">
+          {castformState ? (
+            <CastformRunsPanel
+              projectId={project.id}
+              initialState={castformState}
+            />
+          ) : null}
           <ArtifactBrowser projectId={project.id} data={artifactBrowserData} />
         </TabsContent>
 

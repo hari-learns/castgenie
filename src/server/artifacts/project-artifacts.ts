@@ -23,6 +23,8 @@ const previewPaths = [
   "datasets/eval_qa.jsonl",
   "datasets/action_tasks.jsonl",
   "rewards/reward_spec.json",
+  "castform/readiness.json",
+  "model_versions.json",
   "castform_project/README.md",
   "castform_project/config.yaml",
 ]
@@ -77,7 +79,11 @@ function groupFor(relativePath: string): ArtifactGroup {
   if (relativePath.startsWith("documents/") || relativePath === "chunks.jsonl") return "corpus"
   if (relativePath.startsWith("datasets/")) return "datasets"
   if (relativePath.startsWith("rewards/")) return "rewards"
-  if (relativePath.startsWith("logs/") || relativePath.startsWith("jobs/")) return "logs"
+  if (
+    relativePath.startsWith("logs/") ||
+    relativePath.startsWith("jobs/") ||
+    relativePath.startsWith("castform/")
+  ) return "logs"
   if (relativePath.startsWith("castform_project/")) return "castform_project"
   return "other"
 }
