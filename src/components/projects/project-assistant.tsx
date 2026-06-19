@@ -65,6 +65,8 @@ type ProjectAssistantProps = {
   disabled?: boolean
   disabledReason?: string
   contextSlot?: ReactNode
+  showChat?: boolean
+  showWorkflows?: boolean
 }
 
 function providerLabel(provider?: ProviderName) {
@@ -94,6 +96,8 @@ export function ProjectAssistant({
   disabled = false,
   disabledReason = "This model is not ready yet.",
   contextSlot,
+  showChat = true,
+  showWorkflows = true,
 }: ProjectAssistantProps) {
   const [messages, setMessages] = useState<LocalMessage[]>([])
   const [message, setMessage] = useState(suggestedPrompt)
@@ -275,120 +279,131 @@ ${citations}
   }
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)_24rem]">
+    <div
+      className={
+        showChat && showWorkflows
+          ? "grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)_24rem]"
+          : showChat
+            ? "grid gap-4 lg:grid-cols-2"
+            : "flex flex-col gap-4"
+      }
+    >
       {contextSlot}
-      <Card>
-        <CardHeader>
-          <CardTitle>Ask this model</CardTitle>
-          <CardDescription>
-            Answers use the sources prepared for this project.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {disabled ? (
-            <Alert>
-              <AlertTitle>Model not ready yet</AlertTitle>
-              <AlertDescription>{disabledReason}</AlertDescription>
-            </Alert>
-          ) : null}
-
-          {chatError ? (
-            <Alert variant="destructive">
-              <AlertTitle>Chat failed</AlertTitle>
-              <AlertDescription>{chatError}</AlertDescription>
-            </Alert>
-          ) : null}
-
-          <div className="flex min-h-72 flex-col gap-3 rounded-lg border border-border bg-muted/20 p-3">
-            {messages.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                Ask a question about this project. If the source material is weak,
-                the model should say so.
-              </div>
-            ) : null}
-            {isSending ? (
-              <div className="max-w-[95%] rounded-lg border border-border bg-background px-3 py-3">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2Icon className="animate-spin" aria-hidden="true" />
-                  Reading the project sources and writing an answer
-                </div>
-                <div className="mt-3 flex flex-col gap-2">
-                  <Skeleton className="h-3 w-3/4" />
-                  <Skeleton className="h-3 w-5/6" />
-                  <Skeleton className="h-3 w-1/2" />
-                </div>
-              </div>
+      {showChat ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Ask this model</CardTitle>
+            <CardDescription>
+              Answers use the sources prepared for this project.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            {disabled ? (
+              <Alert>
+                <AlertTitle>Model not ready yet</AlertTitle>
+                <AlertDescription>{disabledReason}</AlertDescription>
+              </Alert>
             ) : null}
 
-            {messages.map((item) => (
-              <div
-                key={item.id}
-                className={
-                  item.role === "user"
-                    ? "ml-auto max-w-[90%] rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground"
-                    : "max-w-[95%] rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                }
-              >
-                {item.provider ? (
-                  <Badge variant="outline">{providerLabel(item.provider)}</Badge>
-                ) : null}
-                <p className="mt-2 whitespace-pre-wrap leading-6">{item.content}</p>
-                <CitationList citations={item.citations} />
-                {item.traceId ? (
-                  <div className="mt-3 flex gap-2">
-                    <Button
-                      size="sm"
-                      variant={item.feedback === "up" ? "default" : "outline"}
-                      type="button"
-                      onClick={() => rateChat(item.traceId!, "up")}
-                    >
-                      <ThumbsUpIcon aria-hidden="true" />
-                      Useful
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={item.feedback === "down" ? "default" : "outline"}
-                      type="button"
-                      onClick={() => rateChat(item.traceId!, "down")}
-                    >
-                      <ThumbsDownIcon aria-hidden="true" />
-                      Weak
-                    </Button>
+            {chatError ? (
+              <Alert variant="destructive">
+                <AlertTitle>Chat failed</AlertTitle>
+                <AlertDescription>{chatError}</AlertDescription>
+              </Alert>
+            ) : null}
+
+            <div className="flex min-h-72 flex-col gap-3 rounded-lg border border-border bg-muted/20 p-3">
+              {messages.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                  Ask a question about this project. If the source material is weak,
+                  the model should say so.
+                </div>
+              ) : null}
+              {isSending ? (
+                <div className="max-w-[95%] rounded-lg border border-border bg-background px-3 py-3">
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2Icon className="animate-spin" aria-hidden="true" />
+                    Reading the project sources and writing an answer
                   </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
+                  <div className="mt-3 flex flex-col gap-2">
+                    <Skeleton className="h-3 w-3/4" />
+                    <Skeleton className="h-3 w-5/6" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                </div>
+              ) : null}
 
-          <form className="flex flex-col gap-3" onSubmit={onChatSubmit}>
-            <Label htmlFor="assistant-message">Your question</Label>
-            <Textarea
-              id="assistant-message"
-              value={message}
-              onChange={(event) => setMessage(event.target.value)}
-              className="min-h-24"
-              disabled={disabled}
-              placeholder={
-                disabled
-                  ? "Chat unlocks when the model is ready"
-                  : "Ask the model a question"
-              }
-            />
-            <div className="flex justify-end">
-              <Button type="submit" disabled={disabled || isSending}>
-                {isSending ? (
-                  <Loader2Icon className="animate-spin" aria-hidden="true" />
-                ) : (
-                  <SendIcon aria-hidden="true" />
-                )}
-                {isSending ? "Generating" : "Send"}
-              </Button>
+              {messages.map((item) => (
+                <div
+                  key={item.id}
+                  className={
+                    item.role === "user"
+                      ? "ml-auto max-w-[90%] rounded-lg bg-primary px-3 py-2 text-sm text-primary-foreground"
+                      : "max-w-[95%] rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  }
+                >
+                  {item.provider ? (
+                    <Badge variant="outline">{providerLabel(item.provider)}</Badge>
+                  ) : null}
+                  <p className="mt-2 whitespace-pre-wrap leading-6">{item.content}</p>
+                  <CitationList citations={item.citations} />
+                  {item.traceId ? (
+                    <div className="mt-3 flex gap-2">
+                      <Button
+                        size="sm"
+                        variant={item.feedback === "up" ? "default" : "outline"}
+                        type="button"
+                        onClick={() => rateChat(item.traceId!, "up")}
+                      >
+                        <ThumbsUpIcon aria-hidden="true" />
+                        Useful
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant={item.feedback === "down" ? "default" : "outline"}
+                        type="button"
+                        onClick={() => rateChat(item.traceId!, "down")}
+                      >
+                        <ThumbsDownIcon aria-hidden="true" />
+                        Weak
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
             </div>
-          </form>
-        </CardContent>
-      </Card>
 
-      <div className="flex flex-col gap-4">
+            <form className="flex flex-col gap-3" onSubmit={onChatSubmit}>
+              <Label htmlFor="assistant-message">Your question</Label>
+              <Textarea
+                id="assistant-message"
+                value={message}
+                onChange={(event) => setMessage(event.target.value)}
+                className="min-h-24"
+                disabled={disabled}
+                placeholder={
+                  disabled
+                    ? "Chat unlocks when the model is ready"
+                    : "Ask the model a question"
+                }
+              />
+              <div className="flex justify-end">
+                <Button type="submit" disabled={disabled || isSending}>
+                  {isSending ? (
+                    <Loader2Icon className="animate-spin" aria-hidden="true" />
+                  ) : (
+                    <SendIcon aria-hidden="true" />
+                  )}
+                  {isSending ? "Generating" : "Send"}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      {showWorkflows ? (
+        <div className="flex flex-col gap-4">
         <Card>
           <CardHeader>
             <CardTitle>Workflows</CardTitle>
@@ -560,7 +575,8 @@ ${citations}
             </CardContent>
           </Card>
         ))}
-      </div>
+        </div>
+      ) : null}
     </div>
   )
 }

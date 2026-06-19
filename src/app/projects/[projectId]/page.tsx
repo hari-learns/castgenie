@@ -7,6 +7,7 @@ import {
   FolderArchiveIcon,
   GraduationCapIcon,
   ListChecksIcon,
+  PlayIcon,
   RefreshCwIcon,
   ScrollTextIcon,
 } from "lucide-react"
@@ -62,6 +63,12 @@ const projectSections = [
     label: "Sources",
     description: "Uploads and web discovery",
     icon: FileTextIcon,
+  },
+  {
+    id: "workflows",
+    label: "Workflows",
+    description: "Prepared outputs",
+    icon: PlayIcon,
   },
   {
     id: "data",
@@ -248,15 +255,18 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
                           </p>
                         </div>
                         <div className="rounded-lg border border-border p-3">
-                          <p className="text-xs text-muted-foreground">Workflows</p>
+                          <p className="text-xs text-muted-foreground">Status</p>
                           <p className="mt-1 text-2xl font-semibold">
-                            {artifacts.modelGoal?.generatedActions.length ?? 0}
+                            {project.status === "ready" || project.status === "model_ready"
+                              ? "Ready"
+                              : "Setup"}
                           </p>
                         </div>
                       </div>
                     </CardContent>
                   </Card>
                 }
+                showWorkflows={false}
                 suggestedPrompt={
                   project.domainSpec?.domain === "OWASP code security"
                     ? "Explain how to review for broken access control with citations."
@@ -264,6 +274,19 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
                       ? "Assess a likely compliance issue and cite the relevant sources."
                       : "Ask this model what it can help you do."
                 }
+              />
+            </section>
+          ) : null}
+
+          {activeSection === "workflows" ? (
+            <section className="flex flex-col gap-4">
+              <ProjectAssistant
+                projectId={project.id}
+                actions={artifacts.modelGoal?.generatedActions ?? []}
+                disabled={project.status !== "ready" && project.status !== "model_ready"}
+                disabledReason="Workflows unlock when the project is ready."
+                showChat={false}
+                suggestedPrompt=""
               />
             </section>
           ) : null}
