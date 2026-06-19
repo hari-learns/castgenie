@@ -1,15 +1,9 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import {
-  BotIcon,
-  DatabaseIcon,
   FileTextIcon,
-  FolderArchiveIcon,
-  GraduationCapIcon,
   ListChecksIcon,
-  PlayIcon,
   RefreshCwIcon,
-  ScrollTextIcon,
 } from "lucide-react"
 
 import { PageHeader } from "@/components/app/page-header"
@@ -56,43 +50,43 @@ const projectSections = [
     id: "workspace",
     label: "Workspace",
     description: "Prompt and assistant",
-    icon: BotIcon,
+    icon: "bot",
   },
   {
     id: "sources",
     label: "Sources",
     description: "Uploads and web discovery",
-    icon: FileTextIcon,
+    icon: "file-text",
   },
   {
     id: "workflows",
     label: "Workflows",
     description: "Prepared outputs",
-    icon: PlayIcon,
+    icon: "play",
   },
   {
     id: "data",
     label: "Data",
     description: "Corpus and datasets",
-    icon: DatabaseIcon,
+    icon: "database",
   },
   {
     id: "files",
     label: "Files & Export",
     description: "Artifacts and ZIP",
-    icon: FolderArchiveIcon,
+    icon: "folder-archive",
   },
   {
     id: "training",
     label: "Training",
     description: "Readiness and runs",
-    icon: GraduationCapIcon,
+    icon: "graduation-cap",
   },
   {
     id: "logs",
     label: "Logs",
     description: "Build history",
-    icon: ScrollTextIcon,
+    icon: "scroll-text",
   },
 ] as const
 
@@ -219,28 +213,19 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
                 contextSlot={
                   <Card>
                     <CardHeader>
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div>
-                          <CardTitle>What you asked CastGenie to build</CardTitle>
-                          <CardDescription>
-                            This is the model workspace CastGenie prepared from your
-                            request.
-                          </CardDescription>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <StatusBadge status={project.status} />
-                          <Button variant="outline" asChild>
-                            <Link href="/projects/new">New workspace</Link>
-                          </Button>
-                        </div>
-                      </div>
+                      <CardTitle>What you asked CastGenie to build</CardTitle>
+                      <CardDescription>
+                        This is the model workspace CastGenie prepared from your
+                        request.
+                      </CardDescription>
                     </CardHeader>
                     <CardContent className="flex flex-col gap-4">
-                      <div className="rounded-lg border border-border bg-muted/30 p-4">
-                        <p className="whitespace-pre-wrap text-sm leading-6">
-                          {project.prompt}
-                        </p>
-                      </div>
+                      <textarea
+                        className="min-h-72 resize-none rounded-lg border border-input bg-background px-4 py-3 text-sm leading-6 shadow-xs outline-none"
+                        defaultValue={project.prompt}
+                        readOnly
+                        aria-label="Original model request"
+                      />
                       <div className="grid gap-3 sm:grid-cols-3">
                         <div className="rounded-lg border border-border p-3">
                           <p className="text-xs text-muted-foreground">Sources</p>
