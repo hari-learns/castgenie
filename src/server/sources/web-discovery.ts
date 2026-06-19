@@ -46,7 +46,23 @@ function domainMatches(domain: string, allowedDomains: string[]) {
   return allowedDomains.some((allowed) => domain === allowed || domain.endsWith(`.${allowed}`))
 }
 
+function inferredAllowedDomains(input: WebDiscoveryInput) {
+  const explicit = parseAllowedDomains(input.allowedDomains)
+  const prompt = input.prompt.toLowerCase()
+
+  if (explicit.length > 0) {
+    return explicit
+  }
+
+  if (prompt.includes("sebi")) {
+    return ["sebi.gov.in"]
+  }
+
+  return []
+}
+
 function queryPlan(input: WebDiscoveryInput): WebSearchPlan {
+  const prompt = input.prompt.toLowerCase()
   const queries =
     input.domainKind === "ca_edtech"
       ? [
@@ -58,6 +74,21 @@ function queryPlan(input: WebDiscoveryInput): WebSearchPlan {
             `${input.prompt} OWASP official guide`,
             `${input.prompt} secure code checklist`,
           ]
+        : prompt.includes("sebi")
+          ? [
+              "SEBI regulations official circulars compliance assessment",
+              "SEBI master circular compliance obligations official",
+              "SEBI listing obligations disclosure requirements official",
+            ]
+          : prompt.includes("compliance") ||
+              prompt.includes("regulation") ||
+              prompt.includes("regulatory") ||
+              prompt.includes("policy")
+            ? [
+                `${input.prompt} official regulator guidance`,
+                `${input.prompt} compliance policy framework official`,
+                `${input.prompt} regulatory checklist official source`,
+              ]
         : [
             `${input.prompt} official guide`,
             `${input.prompt} reference documentation`,
@@ -67,7 +98,7 @@ function queryPlan(input: WebDiscoveryInput): WebSearchPlan {
     projectId: input.projectId,
     provider: input.mockMode || !process.env.EXA_API_KEY ? "mock" : "exa",
     queries: queries.slice(0, 3),
-    allowedDomains: parseAllowedDomains(input.allowedDomains),
+    allowedDomains: inferredAllowedDomains(input),
     maxResults: Math.max(1, Math.min(input.maxSources, Number(process.env.MAX_SOURCES ?? 12))),
     generatedAt: now(),
     warnings: [],
