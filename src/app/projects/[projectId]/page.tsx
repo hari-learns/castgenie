@@ -2,7 +2,6 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import {
   ArchiveIcon,
-  BotIcon,
   FileTextIcon,
   ListChecksIcon,
   RefreshCwIcon,
@@ -11,6 +10,7 @@ import {
 import { PageHeader } from "@/components/app/page-header"
 import { PageShell } from "@/components/app/page-shell"
 import { StatusBadge } from "@/components/app/status-badge"
+import { ProjectAssistant } from "@/components/projects/project-assistant"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -23,7 +23,6 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
   TableBody,
@@ -592,33 +591,15 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         </TabsContent>
 
         <TabsContent value="Assistant" className="flex flex-col gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Assistant chat</CardTitle>
-              <CardDescription>
-                Working chat arrives in Wave 5. This layout now has real corpus
-                and dataset files behind it.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              <div className="rounded-lg border border-border p-4">
-                <p className="text-sm font-medium">Suggested prompt</p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Explain pre-acquisition profits in consolidation and give me a
-                  practice question.
-                </p>
-              </div>
-              <div className="rounded-lg bg-muted/40 p-4">
-                <div className="flex items-center gap-2 text-sm font-medium">
-                  <BotIcon aria-hidden="true" />
-                  Assistant preview
-                </div>
-                <Skeleton className="mt-4 h-4 w-full" />
-                <Skeleton className="mt-2 h-4 w-4/5" />
-                <Skeleton className="mt-2 h-4 w-2/3" />
-              </div>
-            </CardContent>
-          </Card>
+          <ProjectAssistant
+            projectId={project.id}
+            actions={artifacts.modelGoal?.generatedActions ?? []}
+            suggestedPrompt={
+              project.domainSpec?.domain === "OWASP code security"
+                ? "Explain how to review for broken access control with citations."
+                : "Explain pre-acquisition profits in consolidation and give me a practice question."
+            }
+          />
         </TabsContent>
 
         <TabsContent value="Castform Export" className="flex flex-col gap-4">

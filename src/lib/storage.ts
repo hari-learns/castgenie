@@ -16,6 +16,7 @@ import type { ModelGoal } from "@/types/model-goal"
 import type { SourcePlan, TrainingPlan } from "@/types/plans"
 import type { Project } from "@/types/project"
 import type { RewardSpec } from "@/types/rewards"
+import type { ActionTrace, ChatTrace, FeedbackTrace } from "@/types/traces"
 
 export type ArtifactPreview = {
   path: string
@@ -261,6 +262,18 @@ export async function readBuildLogs(projectId: string) {
   )
 
   return parseJsonl<BuildLogRecord>(content)
+}
+
+export async function appendChatTrace(record: ChatTrace) {
+  await appendArtifactJsonl(record.projectId, "logs/chat_traces.jsonl", [record])
+}
+
+export async function appendActionTrace(record: ActionTrace) {
+  await appendArtifactJsonl(record.projectId, "logs/action_traces.jsonl", [record])
+}
+
+export async function appendFeedbackTrace(record: FeedbackTrace) {
+  await appendArtifactJsonl(record.projectId, "logs/feedback.jsonl", [record])
 }
 
 export async function readArtifactPreview(
