@@ -1,9 +1,14 @@
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import {
+  BotIcon,
+  DatabaseIcon,
   FileTextIcon,
+  FolderArchiveIcon,
+  GraduationCapIcon,
   ListChecksIcon,
   RefreshCwIcon,
+  ScrollTextIcon,
 } from "lucide-react"
 
 import { PageHeader } from "@/components/app/page-header"
@@ -33,7 +38,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   readArtifactPreview,
   readBuildJob,
@@ -45,19 +49,53 @@ import { getCastformState } from "@/server/castform/runs"
 
 export const dynamic = "force-dynamic"
 
-const tabItems = [
-  "Overview",
-  "Sources",
-  "Corpus",
-  "Datasets",
-  "Assistant",
-  "Castform Export",
-  "Logs",
-]
+const projectSections = [
+  {
+    id: "workspace",
+    label: "Workspace",
+    description: "Prompt and assistant",
+    icon: BotIcon,
+  },
+  {
+    id: "sources",
+    label: "Sources",
+    description: "Uploads and web discovery",
+    icon: FileTextIcon,
+  },
+  {
+    id: "data",
+    label: "Data",
+    description: "Corpus and datasets",
+    icon: DatabaseIcon,
+  },
+  {
+    id: "files",
+    label: "Files & Export",
+    description: "Artifacts and ZIP",
+    icon: FolderArchiveIcon,
+  },
+  {
+    id: "training",
+    label: "Training",
+    description: "Readiness and runs",
+    icon: GraduationCapIcon,
+  },
+  {
+    id: "logs",
+    label: "Logs",
+    description: "Build history",
+    icon: ScrollTextIcon,
+  },
+] as const
+
+type ProjectSection = (typeof projectSections)[number]["id"]
 
 type ProjectPageProps = {
   params: Promise<{
     projectId: string
+  }>
+  searchParams?: Promise<{
+    section?: string
   }>
 }
 
@@ -80,8 +118,56 @@ function PreviewBlock({
   )
 }
 
-export default async function ProjectPage({ params }: ProjectPageProps) {
+function ProjectSectionNav({
+  projectId,
+  activeSection,
+}: {
+  projectId: string
+  activeSection: ProjectSection
+}) {
+  return (
+    <nav
+      aria-label="Project sections"
+      className="flex gap-2 overflow-x-auto rounded-lg border border-border bg-card p-2 lg:sticky lg:top-8 lg:flex-col lg:overflow-visible"
+    >
+      {projectSections.map((section) => (
+        <Button
+          key={section.id}
+          variant={activeSection === section.id ? "secondary" : "ghost"}
+          className="h-auto min-w-40 justify-start gap-3 px-3 py-3 lg:min-w-0"
+          asChild
+        >
+          <Link
+            href={
+              section.id === "workspace"
+                ? `/projects/${projectId}`
+                : `/projects/${projectId}?section=${section.id}`
+            }
+          >
+            <section.icon aria-hidden="true" />
+            <span className="flex min-w-0 flex-col items-start">
+              <span className="text-sm font-medium">{section.label}</span>
+              <span className="text-xs text-muted-foreground">
+                {section.description}
+              </span>
+            </span>
+          </Link>
+        </Button>
+      ))}
+    </nav>
+  )
+}
+
+function isProjectSection(value: string | undefined): value is ProjectSection {
+  return projectSections.some((section) => section.id === value)
+}
+
+export default async function ProjectPage({ params, searchParams }: ProjectPageProps) {
   const { projectId } = await params
+  const requestedSection = (await searchParams)?.section
+  const activeSection = isProjectSection(requestedSection)
+    ? requestedSection
+    : "workspace"
   const project = await readProject(projectId)
 
   if (!project) {
@@ -141,84 +227,210 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
         }
       />
 
-      <Tabs defaultValue="Overview" className="min-w-0 flex-col">
-        <div className="max-w-full overflow-x-auto pb-1">
-          <TabsList className="w-max">
-            {tabItems.map((item) => (
-              <TabsTrigger key={item} value={item}>
-                {item}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </div>
+      <div className="grid min-w-0 gap-5 lg:grid-cols-[16rem_minmax(0,1fr)]">
+        <ProjectSectionNav
+          projectId={project.id}
+          activeSection={activeSection}
+        />
 
-        <TabsContent value="Overview" className="flex flex-col gap-4">
-          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {metricCards.map((metric) => (
-              <Card key={metric.label}>
+        <div className="min-w-0">
+          {activeSection === "workspace" ? (
+            <section className="flex flex-col gap-4">
+              <Card>
                 <CardHeader>
-                  <CardDescription>{metric.label}</CardDescription>
-                  <CardTitle className="text-3xl">{metric.value}</CardTitle>
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                      <CardTitle>What you asked CastGenie to build</CardTitle>
+                      <CardDescription>
+                        This is the model workspace CastGenie prepared from your
+                        request.
+                      </CardDescription>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <StatusBadge status={project.status} />
+                      <Button variant="outline" asChild>
+                        <Link href="/projects/new">New workspace</Link>
+                      </Button>
+                    </div>
+                  </div>
                 </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">
-                    {metric.detail}
-                  </p>
+                <CardContent className="grid gap-4 lg:grid-cols-[1fr_18rem]">
+                  <div className="rounded-lg border border-border bg-muted/30 p-4">
+                    <p className="whitespace-pre-wrap text-sm leading-6">
+                      {project.prompt}
+                    </p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+                    <div className="rounded-lg border border-border p-3">
+                      <p className="text-xs text-muted-foreground">Sources</p>
+                      <p className="mt-1 text-2xl font-semibold">
+                        {project.metrics.sources}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-border p-3">
+                      <p className="text-xs text-muted-foreground">Documents</p>
+                      <p className="mt-1 text-2xl font-semibold">
+                        {project.metrics.documents}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-border p-3">
+                      <p className="text-xs text-muted-foreground">Workflows</p>
+                      <p className="mt-1 text-2xl font-semibold">
+                        {artifacts.modelGoal?.generatedActions.length ?? 0}
+                      </p>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
-            ))}
-          </section>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Import summary</CardTitle>
-              <CardDescription>
-                Normalized source import metadata from the selected adapter.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Adapter</p>
-                <p className="font-medium">
-                  {artifacts.importSummary?.adapterLabel ?? "No import summary"}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Strategy</p>
-                <p className="font-medium">
-                  {artifacts.importSummary?.strategy ?? "Not available"}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Chapters/topics</p>
-                <p className="font-medium">
-                  {artifacts.importSummary
-                    ? `${artifacts.importSummary.chapterCount} / ${artifacts.importSummary.topicCount}`
-                    : "0 / 0"}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Imported questions</p>
-                <p className="font-medium">
-                  {artifacts.importSummary?.questionCount ?? 0}
-                </p>
-              </div>
-              {artifacts.importSummary?.warnings.length ? (
-                <div className="md:col-span-2 xl:col-span-4">
-                  <p className="text-sm text-muted-foreground">Warnings</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {artifacts.importSummary.warnings.map((warning, index) => (
-                      <Badge key={`${warning}-${index}`} variant="secondary">
-                        {warning}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </CardContent>
-          </Card>
+              <ProjectAssistant
+                projectId={project.id}
+                actions={artifacts.modelGoal?.generatedActions ?? []}
+                suggestedPrompt={
+                  project.domainSpec?.domain === "OWASP code security"
+                    ? "Explain how to review for broken access control with citations."
+                    : project.domainSpec?.domain?.toLowerCase().includes("compliance")
+                      ? "Assess a likely compliance issue and cite the relevant sources."
+                      : "Ask this model what it can help you do."
+                }
+              />
+            </section>
+          ) : null}
 
-          <section className="grid gap-4 lg:grid-cols-[1fr_22rem]">
+          {activeSection === "sources" ? (
+            <section className="flex flex-col gap-4">
+              <Alert>
+                <FileTextIcon aria-hidden="true" />
+                <AlertTitle>Source policy</AlertTitle>
+                <AlertDescription>
+                  {project.domainSpec?.sourcePolicy.permissionNote}
+                </AlertDescription>
+              </Alert>
+              <ProjectSourceManager
+                projectId={project.id}
+                sourceConfig={project.sourceConfig ?? artifacts.uploadManifest?.sourceConfig}
+                uploadManifest={artifacts.uploadManifest}
+                uploadParseReport={artifacts.uploadParseReport}
+                webDiscovery={artifacts.webDiscovery}
+                webScrapeReport={artifacts.webScrapeReport}
+              />
+              <section className="grid gap-4 lg:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Permission summary</CardTitle>
+                    <CardDescription>
+                      Permission status normalized from import metadata.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-wrap gap-2">
+                    {Object.entries(
+                      artifacts.importSummary?.permissionCounts ?? {}
+                    ).length ? (
+                      Object.entries(
+                        artifacts.importSummary?.permissionCounts ?? {}
+                      ).map(([status, count]) => (
+                        <Badge key={status} variant="secondary">
+                          {status}: {count}
+                        </Badge>
+                      ))
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        No permission summary generated yet.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Quality tags</CardTitle>
+                    <CardDescription>
+                      Tags preserved for later eval and reward-quality waves.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="flex flex-wrap gap-2">
+                    {artifacts.qualityTags.length ? (
+                      artifacts.qualityTags.slice(0, 12).flatMap((record) =>
+                        record.tags.map((tag) => (
+                          <Badge key={`${record.nodeId}-${tag}`} variant="outline">
+                            {record.nodeId}: {tag}
+                          </Badge>
+                        ))
+                      )
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        No quality tags generated yet.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </section>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Source manifest</CardTitle>
+                  <CardDescription>
+                    Rows loaded from source_manifest.json.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Title</TableHead>
+                        <TableHead>Domain</TableHead>
+                        <TableHead>Provider</TableHead>
+                        <TableHead>Permission</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {artifacts.sources.map((source) => (
+                        <TableRow key={source.id}>
+                          <TableCell className="min-w-72 font-medium">
+                            {source.title}
+                          </TableCell>
+                          <TableCell>{source.domain}</TableCell>
+                          <TableCell>{source.provider}</TableCell>
+                          <TableCell>{source.permissionStatus}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+              <PreviewBlock
+                title="source_manifest.json"
+                content={artifacts.sourceManifestPreview}
+              />
+              <div className="grid gap-4 lg:grid-cols-2">
+                <PreviewBlock
+                  title="imports/import_summary.json"
+                  content={artifacts.importSummaryPreview}
+                />
+                <PreviewBlock
+                  title="imports/permissions.json"
+                  content={artifacts.permissionsPreview}
+                />
+                <PreviewBlock
+                  title="imports/quality_tags.json"
+                  content={artifacts.qualityTagsPreview}
+                />
+                <PreviewBlock
+                  title="imports/adapter_trace.json"
+                  content={artifacts.adapterTracePreview}
+                />
+                <PreviewBlock
+                  title="imports/web_discovery.json"
+                  content={artifacts.webDiscoveryPreview}
+                />
+                <PreviewBlock
+                  title="imports/web_scrape_report.json"
+                  content={artifacts.webScrapeReportPreview}
+                />
+              </div>
+            </section>
+          ) : null}
+
+          {activeSection === "logs" ? (
+            <section className="grid gap-4 lg:grid-cols-[1fr_22rem]">
             <Card>
               <CardHeader>
                 <CardTitle>Build steps</CardTitle>
@@ -274,9 +486,11 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
                 </div>
               </CardContent>
             </Card>
-          </section>
+            </section>
+          ) : null}
 
-          <section className="grid gap-4 lg:grid-cols-[1fr_22rem]">
+          {activeSection === "logs" ? (
+            <section className="mt-4 grid gap-4 lg:grid-cols-[1fr_22rem]">
             <Card>
               <CardHeader>
                 <CardTitle>Model goal</CardTitle>
@@ -344,192 +558,54 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
                 </div>
               </CardContent>
             </Card>
-          </section>
+            </section>
+          ) : null}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Generated actions</CardTitle>
-              <CardDescription>
-                These are planned product actions for the eventual hosted model.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {(artifacts.modelGoal?.generatedActions ?? []).map((action) => (
-                <div
-                  key={action.id}
-                  className="rounded-lg border border-border bg-muted/30 p-4"
-                >
-                  <Badge variant="secondary">{action.outputFormat}</Badge>
-                  <p className="mt-3 font-medium">{action.label}</p>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    {action.description}
-                  </p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="Sources" className="flex flex-col gap-4">
-          <Alert>
-            <FileTextIcon aria-hidden="true" />
-            <AlertTitle>Source policy</AlertTitle>
-            <AlertDescription>
-              {project.domainSpec?.sourcePolicy.permissionNote}
-            </AlertDescription>
-          </Alert>
-          <ProjectSourceManager
-            projectId={project.id}
-            sourceConfig={project.sourceConfig ?? artifacts.uploadManifest?.sourceConfig}
-            uploadManifest={artifacts.uploadManifest}
-            uploadParseReport={artifacts.uploadParseReport}
-            webDiscovery={artifacts.webDiscovery}
-            webScrapeReport={artifacts.webScrapeReport}
-          />
-          <section className="grid gap-4 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Permission summary</CardTitle>
-                <CardDescription>
-                  Permission status normalized from import metadata.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-wrap gap-2">
-                {Object.entries(
-                  artifacts.importSummary?.permissionCounts ?? {}
-                ).length ? (
-                  Object.entries(
-                    artifacts.importSummary?.permissionCounts ?? {}
-                  ).map(([status, count]) => (
-                    <Badge key={status} variant="secondary">
-                      {status}: {count}
-                    </Badge>
-                  ))
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    No permission summary generated yet.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>Quality tags</CardTitle>
-                <CardDescription>
-                  Tags preserved for later eval and reward-quality waves.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-wrap gap-2">
-                {artifacts.qualityTags.length ? (
-                  artifacts.qualityTags.slice(0, 12).flatMap((record) =>
-                    record.tags.map((tag) => (
-                      <Badge key={`${record.nodeId}-${tag}`} variant="outline">
-                        {record.nodeId}: {tag}
-                      </Badge>
-                    ))
-                  )
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    No quality tags generated yet.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </section>
-          <Card>
-            <CardHeader>
-              <CardTitle>Source manifest</CardTitle>
-              <CardDescription>
-                Rows loaded from source_manifest.json.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Domain</TableHead>
-                    <TableHead>Provider</TableHead>
-                    <TableHead>Permission</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {artifacts.sources.map((source) => (
-                    <TableRow key={source.id}>
-                      <TableCell className="min-w-72 font-medium">
-                        {source.title}
-                      </TableCell>
-                      <TableCell>{source.domain}</TableCell>
-                      <TableCell>{source.provider}</TableCell>
-                      <TableCell>{source.permissionStatus}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-          <PreviewBlock
-            title="source_manifest.json"
-            content={artifacts.sourceManifestPreview}
-          />
-          <div className="grid gap-4 lg:grid-cols-2">
-            <PreviewBlock
-              title="imports/import_summary.json"
-              content={artifacts.importSummaryPreview}
-            />
-            <PreviewBlock
-              title="imports/permissions.json"
-              content={artifacts.permissionsPreview}
-            />
-            <PreviewBlock
-              title="imports/quality_tags.json"
-              content={artifacts.qualityTagsPreview}
-            />
-            <PreviewBlock
-              title="imports/adapter_trace.json"
-              content={artifacts.adapterTracePreview}
-            />
-            <PreviewBlock
-              title="imports/web_discovery.json"
-              content={artifacts.webDiscoveryPreview}
-            />
-            <PreviewBlock
-              title="imports/web_scrape_report.json"
-              content={artifacts.webScrapeReportPreview}
-            />
-          </div>
-        </TabsContent>
-
-        <TabsContent value="Corpus" className="flex flex-col gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Corpus preview</CardTitle>
-              <CardDescription>
-                Chunk rows loaded from chunks.jsonl.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              <Input placeholder="Search chunks" />
-              <div className="grid gap-3 md:grid-cols-2">
-                {artifacts.chunks.slice(0, 4).map((chunk) => (
-                  <div
-                    key={chunk.id}
-                    className="rounded-lg border border-border bg-muted/30 p-4"
-                  >
-                    <Badge variant="secondary">{chunk.id}</Badge>
-                    <p className="mt-3 text-sm font-medium">{chunk.title}</p>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      {chunk.text.replace(/^## .+\n/, "").slice(0, 220)}...
-                    </p>
-                  </div>
+          {activeSection === "data" ? (
+            <section className="flex flex-col gap-4">
+              <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {metricCards.map((metric) => (
+                  <Card key={metric.label}>
+                    <CardHeader>
+                      <CardDescription>{metric.label}</CardDescription>
+                      <CardTitle className="text-3xl">{metric.value}</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-muted-foreground">
+                        {metric.detail}
+                      </p>
+                    </CardContent>
+                  </Card>
                 ))}
-              </div>
-            </CardContent>
-          </Card>
-          <PreviewBlock title="chunks.jsonl" content={artifacts.chunksPreview} />
-        </TabsContent>
+              </section>
 
-        <TabsContent value="Datasets" className="flex flex-col gap-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Corpus preview</CardTitle>
+                  <CardDescription>
+                    Chunk rows loaded from chunks.jsonl.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                  <Input placeholder="Search chunks" />
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {artifacts.chunks.slice(0, 4).map((chunk) => (
+                      <div
+                        key={chunk.id}
+                        className="rounded-lg border border-border bg-muted/30 p-4"
+                      >
+                        <Badge variant="secondary">{chunk.id}</Badge>
+                        <p className="mt-3 text-sm font-medium">{chunk.title}</p>
+                        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                          {chunk.text.replace(/^## .+\n/, "").slice(0, 220)}...
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+              <PreviewBlock title="chunks.jsonl" content={artifacts.chunksPreview} />
+
           <Card>
             <CardHeader>
               <CardTitle>QA dataset preview</CardTitle>
@@ -610,31 +686,76 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             title="datasets/practice_questions.md"
             content={artifacts.practiceQuestions}
           />
-        </TabsContent>
+            </section>
+          ) : null}
 
-        <TabsContent value="Assistant" className="flex flex-col gap-4">
-          <ProjectAssistant
-            projectId={project.id}
-            actions={artifacts.modelGoal?.generatedActions ?? []}
-            suggestedPrompt={
-              project.domainSpec?.domain === "OWASP code security"
-                ? "Explain how to review for broken access control with citations."
-                : "Explain pre-acquisition profits in consolidation and give me a practice question."
-            }
-          />
-        </TabsContent>
+          {activeSection === "files" ? (
+            <section className="flex flex-col gap-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Import summary</CardTitle>
+                  <CardDescription>
+                    Normalized source import metadata from the selected adapter.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Adapter</p>
+                    <p className="font-medium">
+                      {artifacts.importSummary?.adapterLabel ?? "No import summary"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Strategy</p>
+                    <p className="font-medium">
+                      {artifacts.importSummary?.strategy ?? "Not available"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Chapters/topics</p>
+                    <p className="font-medium">
+                      {artifacts.importSummary
+                        ? `${artifacts.importSummary.chapterCount} / ${artifacts.importSummary.topicCount}`
+                        : "0 / 0"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Imported questions</p>
+                    <p className="font-medium">
+                      {artifacts.importSummary?.questionCount ?? 0}
+                    </p>
+                  </div>
+                  {artifacts.importSummary?.warnings.length ? (
+                    <div className="md:col-span-2 xl:col-span-4">
+                      <p className="text-sm text-muted-foreground">Warnings</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {artifacts.importSummary.warnings.map((warning, index) => (
+                          <Badge key={`${warning}-${index}`} variant="secondary">
+                            {warning}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+              <ArtifactBrowser projectId={project.id} data={artifactBrowserData} />
+            </section>
+          ) : null}
 
-        <TabsContent value="Castform Export" className="flex flex-col gap-4">
+          {activeSection === "training" ? (
+            <section className="flex flex-col gap-4">
           {castformState ? (
             <CastformRunsPanel
               projectId={project.id}
               initialState={castformState}
             />
           ) : null}
-          <ArtifactBrowser projectId={project.id} data={artifactBrowserData} />
-        </TabsContent>
+            </section>
+          ) : null}
 
-        <TabsContent value="Logs" className="flex flex-col gap-4">
+          {activeSection === "logs" ? (
+            <section className="mt-4 flex flex-col gap-4">
           <Card>
             <CardHeader>
               <CardTitle>Build logs</CardTitle>
@@ -663,8 +784,10 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             </CardContent>
           </Card>
           <PreviewBlock title="logs/build_logs.jsonl" content={buildLogs.content} />
-        </TabsContent>
-      </Tabs>
+            </section>
+          ) : null}
+        </div>
+      </div>
     </PageShell>
   )
 }

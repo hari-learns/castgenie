@@ -265,9 +265,9 @@ ${citations}
     <div className="grid gap-4 xl:grid-cols-[1fr_24rem]">
       <Card>
         <CardHeader>
-          <CardTitle>Assistant chat</CardTitle>
+          <CardTitle>Ask this model</CardTitle>
           <CardDescription>
-            Source-grounded local RAG over this project&apos;s chunks.
+            Answers use the sources prepared for this project.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -281,15 +281,15 @@ ${citations}
           <div className="flex min-h-72 flex-col gap-3 rounded-lg border border-border bg-muted/20 p-3">
             {messages.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                Ask a domain question. The answer must cite retrieved project
-                chunks, even when the match is weak.
+                Ask a question about this project. If the source material is weak,
+                the model should say so.
               </div>
             ) : null}
             {isSending ? (
               <div className="max-w-[95%] rounded-lg border border-border bg-background px-3 py-3">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2Icon className="animate-spin" aria-hidden="true" />
-                  Retrieving chunks and generating an answer
+                  Reading the project sources and writing an answer
                 </div>
                 <div className="mt-3 flex flex-col gap-2">
                   <Skeleton className="h-3 w-3/4" />
@@ -340,13 +340,13 @@ ${citations}
           </div>
 
           <form className="flex flex-col gap-3" onSubmit={onChatSubmit}>
-            <Label htmlFor="assistant-message">Message</Label>
+            <Label htmlFor="assistant-message">Your question</Label>
             <Textarea
               id="assistant-message"
               value={message}
               onChange={(event) => setMessage(event.target.value)}
               className="min-h-24"
-              placeholder="Ask a source-grounded question"
+              placeholder="Ask the model a question"
             />
             <div className="flex justify-end">
               <Button type="submit" disabled={isSending}>
@@ -365,9 +365,9 @@ ${citations}
       <div className="flex flex-col gap-4">
         <Card>
           <CardHeader>
-            <CardTitle>Actions</CardTitle>
+            <CardTitle>Workflows</CardTitle>
             <CardDescription>
-              Generated from the model goal, then grounded in retrieved chunks.
+              One-click outputs CastGenie prepared for this project.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
@@ -418,8 +418,8 @@ ${citations}
               ))
             ) : (
               <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                No generated actions are available yet. Rebuild the project after
-                the planner runs.
+                No workflows are available yet. Rebuild the project after setup
+                completes.
               </div>
             )}
           </CardContent>
@@ -430,7 +430,7 @@ ${citations}
             <CardHeader>
               <CardTitle className="text-base">Action running</CardTitle>
               <CardDescription>
-                Retrieving source chunks and formatting the generated output.
+                Reading the project sources and formatting the output.
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-2">
@@ -444,7 +444,7 @@ ${citations}
         {actionResults.length === 0 && !runningActionId ? (
           <Card>
             <CardContent className="p-4 text-sm text-muted-foreground">
-              Run an action to generate a reusable output with citations,
+              Run a workflow to generate a reusable output with citations,
               feedback, copy, and markdown download controls.
             </CardContent>
           </Card>
