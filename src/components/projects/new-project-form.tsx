@@ -22,7 +22,6 @@ import { Textarea } from "@/components/ui/textarea"
 
 export function NewProjectForm() {
   const router = useRouter()
-  const [vertical, setVertical] = useState("ca-accounting")
   const [maxSources, setMaxSources] = useState("8")
   const [selectedFileCount, setSelectedFileCount] = useState(0)
   const [permissionAttested, setPermissionAttested] = useState(false)
@@ -36,7 +35,6 @@ export function NewProjectForm() {
     setIsSubmitting(true)
 
     const formData = new FormData(event.currentTarget)
-    formData.set("vertical", vertical)
     formData.set("maxSources", maxSources)
     formData.set("permissionAttested", permissionAttested ? "true" : "false")
     formData.set("allowWebDiscovery", allowWebDiscovery ? "true" : "false")
@@ -81,39 +79,37 @@ export function NewProjectForm() {
           <Input
             id="project-name"
             name="name"
-            placeholder="CA Advanced Accounting assistant"
+            placeholder="Optional name, for example Security Review Assistant"
           />
         </div>
 
         <div className="flex flex-col gap-2">
-          <Label htmlFor="demo-vertical">Demo vertical</Label>
-          <Select value={vertical} onValueChange={setVertical}>
-            <SelectTrigger id="demo-vertical" className="w-full">
-              <SelectValue placeholder="Choose a vertical" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="ca-accounting">
-                  CA Advanced Accounting
-                </SelectItem>
-                <SelectItem value="gst-basics">GST Basics</SelectItem>
-                <SelectItem value="owasp-security">OWASP Security</SelectItem>
-                <SelectItem value="custom">Custom</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
+          <Label htmlFor="domain-hint">Optional domain hint</Label>
+          <Input
+            id="domain-hint"
+            name="vertical"
+            placeholder="Leave blank if the prompt says enough"
+          />
+          <p className="text-xs leading-5 text-muted-foreground">
+            CastGenie infers the source plan, actions, datasets, and Castform
+            workspace from the English brief. This field is only metadata.
+          </p>
         </div>
       </div>
 
       <div className="flex flex-col gap-2">
-        <Label htmlFor="main-prompt">Main prompt</Label>
+        <Label htmlFor="main-prompt">Describe the model or assistant you want</Label>
         <Textarea
           id="main-prompt"
           name="prompt"
           className="min-h-36"
-          defaultValue="Build me an expert assistant for CA Final Advanced Accounting in India. It should explain consolidation concepts, solve journal-entry style problems step-by-step, generate practice questions, and cite the source material."
+          placeholder="Example: I want a model that reviews a codebase for OWASP bugs, explains each issue, suggests fixes, and creates a secure-code checklist. Or: I want an ed-tech model that generates lessons, MCQs, papers, and answer keys from my uploaded source material."
           required
         />
+        <p className="text-xs leading-5 text-muted-foreground">
+          Write the outcome in plain English. You do not need to choose RAG,
+          chunking, datasets, actions, rewards, or training internals.
+        </p>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[1fr_18rem]">
@@ -184,19 +180,6 @@ export function NewProjectForm() {
       <Separator />
 
       <div className="grid gap-3 sm:grid-cols-2">
-        {[
-          "Generate practice questions",
-          "Generate eval set",
-          "Generate Castform export",
-        ].map((label) => (
-          <label
-            key={label}
-            className="flex min-h-12 items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm"
-          >
-            <Checkbox defaultChecked />
-            <span>{label}</span>
-          </label>
-        ))}
         <label className="flex min-h-12 items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm">
           <Checkbox
             checked={allowWebDiscovery}
@@ -205,7 +188,7 @@ export function NewProjectForm() {
           <span>Allow web discovery when uploads are absent</span>
         </label>
         <label className="flex min-h-12 items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm">
-          <Checkbox defaultChecked />
+          <Checkbox checked disabled />
           <span>Use mock seed data if APIs are unavailable</span>
         </label>
       </div>

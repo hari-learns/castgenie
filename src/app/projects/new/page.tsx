@@ -34,8 +34,9 @@ export default function NewProjectPage() {
         <FlaskConicalIcon aria-hidden="true" />
         <AlertTitle>Automatic backend build</AlertTitle>
         <AlertDescription>
-          Submit an English model request. CastGenie will plan and run the
-          Wave 3 mock backend pipeline automatically.
+          Submit the outcome you want in English. CastGenie plans sources,
+          imports or discovers material, chunks the corpus, generates actions,
+          creates datasets, and prepares Castform-ready artifacts automatically.
         </AlertDescription>
       </Alert>
 
@@ -43,7 +44,7 @@ export default function NewProjectPage() {
         <CardHeader>
           <CardTitle>Workspace brief</CardTitle>
           <CardDescription>
-            Use the CA Advanced Accounting demo or describe a custom domain.
+            No fixed vertical is required. The prompt is the product brief.
           </CardDescription>
         </CardHeader>
         <CardContent>

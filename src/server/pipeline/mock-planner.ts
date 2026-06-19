@@ -57,6 +57,18 @@ function classify(prompt: string): PlannedProject["kind"] {
   }
 
   if (
+    normalized.includes("compliance") ||
+    normalized.includes("compliant") ||
+    normalized.includes("non-compliant") ||
+    normalized.includes("regulation") ||
+    normalized.includes("regulatory") ||
+    normalized.includes("policy") ||
+    normalized.includes("internal standard")
+  ) {
+    return "generic"
+  }
+
+  if (
     normalized.includes(" ca ") ||
     normalized.includes("chartered accountant") ||
     normalized.includes("advanced accounting") ||
@@ -191,6 +203,64 @@ export function planProject({ projectId, prompt }: PlannerInput): PlannedProject
         "Produce MCQs and question papers with answer keys",
         "Ground explanations in provided material",
         "Track source permissions for past papers and study content",
+      ],
+    })
+  }
+
+  const normalizedPrompt = prompt.toLowerCase()
+
+  if (
+    normalizedPrompt.includes("compliance") ||
+    normalizedPrompt.includes("compliant") ||
+    normalizedPrompt.includes("non-compliant") ||
+    normalizedPrompt.includes("regulation") ||
+    normalizedPrompt.includes("regulatory") ||
+    normalizedPrompt.includes("policy") ||
+    normalizedPrompt.includes("internal standard")
+  ) {
+    const actions = [
+      makeAction(
+        "assess-compliance",
+        "Assess compliant vs non-compliant",
+        "Evaluate a scenario against retrieved policy or regulatory material and explain the decision.",
+        "explanation",
+        "audit_report",
+        ["compliance", "policy", "regulation"]
+      ),
+      makeAction(
+        "explain-non-compliance",
+        "Explain non-compliance risk",
+        "Identify likely gaps, missing evidence, and remediation steps with citations.",
+        "explanation",
+        "chat_answer",
+        ["risk", "non-compliant", "control"]
+      ),
+      makeAction(
+        "create-control-checklist",
+        "Create compliance checklist",
+        "Generate a control checklist for reviewing future cases against the source material.",
+        "question_generation",
+        "audit_report",
+        ["checklist", "control", "policy"]
+      ),
+    ]
+
+    return makePlannedProject({
+      projectId,
+      prompt,
+      kind,
+      domain: "Compliance assessment",
+      title: "Compliance Assessment Model",
+      targetUser: "Compliance reviewer assessing company scenarios",
+      capabilities: ["chat", "explanation", "question_generation"],
+      actions,
+      riskLevel: "high",
+      sourceKinds: ["uploaded_file", "web_search", "synthetic_seed"],
+      successCriteria: [
+        "Assess scenarios against cited policy or regulatory source material",
+        "Explain compliant and non-compliant outcomes with evidence",
+        "Generate reusable control checklists",
+        "Avoid legal conclusions when source evidence is incomplete",
       ],
     })
   }

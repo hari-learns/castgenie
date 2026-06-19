@@ -38,7 +38,7 @@ export function AppSidebar() {
       <div className="mt-auto rounded-lg border border-border bg-background p-4">
         <p className="text-sm font-medium">Demo mode</p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Static shell only. Real storage and build pipeline start in Wave 2.
+          Local JSON pipeline with mock-safe providers and optional real source discovery.
         </p>
       </div>
     </aside>

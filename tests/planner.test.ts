@@ -40,4 +40,22 @@ describe("planProject", () => {
       expect.arrayContaining(["answer-with-sources", "create-lesson", "create-eval-questions"])
     )
   })
+
+  it("creates compliance-specific actions for compliance assessment prompts", () => {
+    const plan = planProject({
+      projectId: "test-compliance",
+      prompt:
+        "Build a compliance assessment model that determines compliant versus non-compliant outcomes based on policies, regulations, and internal standards.",
+    })
+
+    expect(plan.kind).toBe("generic")
+    expect(plan.modelGoal.domain).toBe("Compliance assessment")
+    expect(plan.modelGoal.generatedActions.map((action) => action.id)).toEqual(
+      expect.arrayContaining([
+        "assess-compliance",
+        "explain-non-compliance",
+        "create-control-checklist",
+      ])
+    )
+  })
 })
