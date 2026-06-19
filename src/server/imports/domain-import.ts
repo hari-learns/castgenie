@@ -1,5 +1,6 @@
 import caFixture from "@/server/imports/fixtures/wire-neurons-ca-fixture.json"
 import { parseUploadedDocuments } from "@/server/sources/source-intake"
+import { runWebDiscovery } from "@/server/sources/web-discovery"
 import type { ChunkRecord, DocumentRecord, QAPair, SourceRecord } from "@/types/artifacts"
 import type {
   AdapterTraceRecord,
@@ -177,6 +178,9 @@ function makeBundle(input: {
   permissionNote: string
   chunks?: ChunkRecord[]
   uploadParseReport?: ImportedDomainBundle["uploadParseReport"]
+  webSearchPlan?: ImportedDomainBundle["webSearchPlan"]
+  webDiscovery?: ImportedDomainBundle["webDiscovery"]
+  webScrapeReport?: ImportedDomainBundle["webScrapeReport"]
 }): ImportedDomainBundle {
   const sources = input.seeds.map(makeSource)
   const documents = input.seeds.map((seed, index) => makeDocument(input.projectId, seed, index))
@@ -204,6 +208,9 @@ function makeBundle(input: {
     qualityTags: input.qualityTags,
     adapterTrace: input.trace,
     uploadParseReport: input.uploadParseReport,
+    webSearchPlan: input.webSearchPlan,
+    webDiscovery: input.webDiscovery,
+    webScrapeReport: input.webScrapeReport,
   }
 }
 
@@ -612,8 +619,86 @@ const uploadPlaceholderAdapter: DomainImportAdapter = {
   },
 }
 
+const webDiscoveryAdapter: DomainImportAdapter = {
+  id: "web-discovery",
+  label: "Web discovery adapter",
+  strategy: "web_search",
+  async detect(input) {
+    if (!input.allowWebDiscovery) return false
+    if (input.sourceStrategy === "uploaded_file") return false
+    if (input.mockMode && input.domainKind !== "generic") return false
+    return input.sourceKinds.includes("web_search") || input.domainKind === "generic" || Boolean(process.env.EXA_API_KEY)
+  },
+  async import(input, trace) {
+    const web = await runWebDiscovery({
+      projectId: input.projectId,
+      prompt: input.prompt,
+      domainKind: input.domainKind,
+      allowedDomains: input.allowedDomains,
+      maxSources: input.limits.maxSources,
+      mockMode: input.mockMode,
+    })
+    const seeds: SourceDocumentSeed[] = web.documents.map((document, index) => ({
+      sourceId: `web_source_${String(index + 1).padStart(3, "0")}`,
+      documentId: `web_doc_${String(index + 1).padStart(3, "0")}`,
+      title: document.result.title,
+      url: document.result.url,
+      provider: document.result.provider === "exa"
+        ? "exa"
+        : document.result.provider === "mock"
+          ? "web_mock"
+          : "firecrawl",
+      domain: document.result.domain,
+      permissionStatus: document.result.permissionStatus,
+      notes: [
+        `Discovered by ${document.result.provider}.`,
+        document.result.allowedDomainMatch
+          ? "Domain matched the allowed-domain list."
+          : "Domain was not explicitly allow-listed; review before training.",
+      ].join(" "),
+      text: [
+        `## Web source: ${document.result.title}`,
+        `URL: ${document.result.url}`,
+        `Provider: ${document.result.provider}`,
+        `Permission status: ${document.result.permissionStatus}`,
+        "",
+        document.markdown,
+      ].join("\n"),
+    }))
+
+    return makeBundle({
+      adapter: webDiscoveryAdapter,
+      projectId: input.projectId,
+      strategy: web.scrape.scrapedCount > 0 ? "web_scrape" : "web_search",
+      seeds,
+      domainGraph: genericGraph(input.domainKind, seeds),
+      questions: [],
+      qualityTags: seeds.map((seed) => ({
+        nodeId: `source-node-${seed.sourceId}`,
+        domain: input.domainKind,
+        tags: ["web", seed.provider, seed.permissionStatus],
+      })),
+      trace,
+      chapterCount: 0,
+      topicCount: seeds.length,
+      warnings: [
+        ...new Set([
+          ...web.discovery.warnings,
+          ...web.scrape.warnings,
+          "Web sources require permission review before real training.",
+        ]),
+      ],
+      permissionNote: "Web sources are public/provenance-tracked but still require review before training.",
+      webSearchPlan: web.plan,
+      webDiscovery: web.discovery,
+      webScrapeReport: web.scrape,
+    })
+  },
+}
+
 const adapters: DomainImportAdapter[] = [
   uploadPlaceholderAdapter,
+  webDiscoveryAdapter,
   localJsonFolderAdapter,
   wireNeuronsFixtureAdapter,
   codebasePlaceholderAdapter,

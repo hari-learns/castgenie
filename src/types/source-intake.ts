@@ -22,6 +22,7 @@ export type SourceConfig = {
   allowedDomains?: string
   maxSources: number
   permissionAttested: boolean
+  allowWebDiscovery: boolean
   uploadedFileCount: number
   parseableFileCount: number
   skippedFileCount: number

@@ -10,6 +10,7 @@ export type SourceRecord = {
     | "wire_neurons"
     | "local_folder"
     | "codebase"
+    | "web_mock"
   domain: string
   fetchedAt: string
   permissionStatus:

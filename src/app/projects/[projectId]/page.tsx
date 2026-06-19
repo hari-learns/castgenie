@@ -204,8 +204,8 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
                 <div className="md:col-span-2 xl:col-span-4">
                   <p className="text-sm text-muted-foreground">Warnings</p>
                   <div className="mt-2 flex flex-wrap gap-2">
-                    {artifacts.importSummary.warnings.map((warning) => (
-                      <Badge key={warning} variant="secondary">
+                    {artifacts.importSummary.warnings.map((warning, index) => (
+                      <Badge key={`${warning}-${index}`} variant="secondary">
                         {warning}
                       </Badge>
                     ))}
@@ -380,6 +380,8 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             sourceConfig={project.sourceConfig ?? artifacts.uploadManifest?.sourceConfig}
             uploadManifest={artifacts.uploadManifest}
             uploadParseReport={artifacts.uploadParseReport}
+            webDiscovery={artifacts.webDiscovery}
+            webScrapeReport={artifacts.webScrapeReport}
           />
           <section className="grid gap-4 lg:grid-cols-2">
             <Card>
@@ -483,6 +485,14 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
             <PreviewBlock
               title="imports/adapter_trace.json"
               content={artifacts.adapterTracePreview}
+            />
+            <PreviewBlock
+              title="imports/web_discovery.json"
+              content={artifacts.webDiscoveryPreview}
+            />
+            <PreviewBlock
+              title="imports/web_scrape_report.json"
+              content={artifacts.webScrapeReportPreview}
             />
           </div>
         </TabsContent>

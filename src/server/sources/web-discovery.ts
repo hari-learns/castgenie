@@ -1,0 +1,385 @@
+import type { DomainImportKind } from "@/types/imports"
+import type {
+  WebDiscoveryReport,
+  WebDiscoveryResult,
+  WebScrapeRecord,
+  WebScrapeReport,
+  WebSearchPlan,
+} from "@/types/web-sources"
+
+type WebDiscoveryInput = {
+  projectId: string
+  prompt: string
+  domainKind: DomainImportKind
+  allowedDomains?: string
+  maxSources: number
+  mockMode: boolean
+}
+
+type WebDocument = {
+  result: WebDiscoveryResult
+  markdown: string
+}
+
+function now() {
+  return new Date().toISOString()
+}
+
+function parseAllowedDomains(value?: string) {
+  return (value ?? "")
+    .split(/[,\n]/)
+    .map((domain) => domain.trim().replace(/^https?:\/\//, "").replace(/\/.*$/, ""))
+    .filter(Boolean)
+}
+
+function domainFromUrl(url: string) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "")
+  } catch {
+    return "unknown"
+  }
+}
+
+function domainMatches(domain: string, allowedDomains: string[]) {
+  if (allowedDomains.length === 0) return false
+  return allowedDomains.some((allowed) => domain === allowed || domain.endsWith(`.${allowed}`))
+}
+
+function queryPlan(input: WebDiscoveryInput): WebSearchPlan {
+  const queries =
+    input.domainKind === "ca_edtech"
+      ? [
+          `${input.prompt} syllabus official source`,
+          `${input.prompt} exam question format official source`,
+        ]
+      : input.domainKind === "owasp_security"
+        ? [
+            `${input.prompt} OWASP official guide`,
+            `${input.prompt} secure code checklist`,
+          ]
+        : [
+            `${input.prompt} official guide`,
+            `${input.prompt} reference documentation`,
+          ]
+
+  return {
+    projectId: input.projectId,
+    provider: input.mockMode || !process.env.EXA_API_KEY ? "mock" : "exa",
+    queries: queries.slice(0, 3),
+    allowedDomains: parseAllowedDomains(input.allowedDomains),
+    maxResults: Math.max(1, Math.min(input.maxSources, Number(process.env.MAX_SOURCES ?? 12))),
+    generatedAt: now(),
+    warnings: [],
+  }
+}
+
+function mockResults(input: WebDiscoveryInput, plan: WebSearchPlan): WebDiscoveryResult[] {
+  const fixtures =
+    input.domainKind === "ca_edtech"
+      ? [
+          {
+            title: "ICAI-style syllabus and lesson source pattern",
+            url: "https://example.edu/ca-syllabus-pattern",
+            text: "## Syllabus mapping\nLessons should map concepts to chapters, examples, mistakes, and exam outcomes.\n\n## Question pattern\nQuestions should include marks, topic coverage, answer format, and source-grounded explanations.",
+          },
+          {
+            title: "CA exam practice generation reference",
+            url: "https://example.edu/ca-practice-reference",
+            text: "## Practice design\nUseful practice sets balance direct concept checks, application problems, and answer keys.\n\n## Quality rule\nPast-paper-like generation should copy structure, not copyrighted questions.",
+          },
+        ]
+      : input.domainKind === "owasp_security"
+        ? [
+            {
+              title: "OWASP review workflow public reference",
+              url: "https://owasp.org/www-project-top-ten/",
+              text: "## Security source pattern\nReview inputs, trust boundaries, sinks, authentication, authorization, and output encoding.\n\n## Evidence rule\nDo not claim exploitability without code or source evidence.",
+            },
+            {
+              title: "Secure remediation checklist source",
+              url: "https://owasp.org/www-project-cheat-sheets/",
+              text: "## Remediation pattern\nFindings should include risk, affected path, preconditions, fix guidance, and regression tests.\n\n## Checklist\nUse parameterized APIs, central authorization, least privilege, and output encoding.",
+            },
+          ]
+        : [
+            {
+              title: "Public domain model grounding guide",
+              url: "https://example.com/domain-grounding-guide",
+              text: "## Source grounding\nA domain assistant should answer from provided material, cite evidence, and expose uncertainty.\n\n## Dataset workflow\nIngest sources, chunk the corpus, create QA rows, eval rows, and action tasks.",
+            },
+            {
+              title: "Public expert assistant action guide",
+              url: "https://example.com/expert-action-guide",
+              text: "## Action design\nActions should match the user's workflow and produce structured outputs.\n\n## Safety\nAvoid unsupported claims when source evidence is weak.",
+            },
+          ]
+
+  return fixtures.slice(0, plan.maxResults).map((fixture, index) => {
+    const domain = domainFromUrl(fixture.url)
+    const allowedDomainMatch = domainMatches(domain, plan.allowedDomains)
+
+    return {
+      id: `web_result_${String(index + 1).padStart(3, "0")}`,
+      query: plan.queries[index % plan.queries.length],
+      title: fixture.title,
+      url: fixture.url,
+      domain,
+      provider: "mock",
+      selected: true,
+      allowedDomainMatch,
+      permissionStatus: "allowed_public",
+      text: fixture.text,
+    }
+  })
+}
+
+async function exaResults(plan: WebSearchPlan): Promise<WebDiscoveryResult[]> {
+  const apiKey = process.env.EXA_API_KEY
+  if (!apiKey) return []
+
+  const results: WebDiscoveryResult[] = []
+
+  for (const query of plan.queries) {
+    const response = await fetch("https://api.exa.ai/search", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        query,
+        includeDomains: plan.allowedDomains.length ? plan.allowedDomains : undefined,
+        numResults: Math.min(plan.maxResults, 10),
+        contents: {
+          text: true,
+          highlights: true,
+          summary: true,
+        },
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error(`Exa search failed with ${response.status}`)
+    }
+
+    const payload = (await response.json()) as {
+      results?: Array<{
+        title?: string
+        url?: string
+        text?: string
+        summary?: string
+        highlights?: string[]
+      }>
+    }
+
+    for (const item of payload.results ?? []) {
+      if (!item.url || results.some((result) => result.url === item.url)) continue
+      const domain = domainFromUrl(item.url)
+      const allowedDomainMatch = domainMatches(domain, plan.allowedDomains)
+      results.push({
+        id: `web_result_${String(results.length + 1).padStart(3, "0")}`,
+        query,
+        title: item.title || item.url,
+        url: item.url,
+        domain,
+        provider: "exa",
+        selected: allowedDomainMatch || plan.allowedDomains.length === 0,
+        allowedDomainMatch,
+        permissionStatus: allowedDomainMatch ? "allowed_public" : "unknown",
+        text: item.text || item.highlights?.join("\n\n"),
+        summary: item.summary,
+        warning: allowedDomainMatch
+          ? undefined
+          : "Domain was not explicitly allow-listed; review permission before training.",
+      })
+    }
+  }
+
+  return results.slice(0, plan.maxResults)
+}
+
+async function firecrawlMarkdown(url: string) {
+  const apiKey = process.env.FIRECRAWL_API_KEY
+  if (!apiKey) return null
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 20000)
+
+  try {
+    const response = await fetch("https://api.firecrawl.dev/v2/scrape", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url,
+        formats: ["markdown"],
+        onlyMainContent: true,
+        timeout: 20000,
+      }),
+      signal: controller.signal,
+    })
+
+    if (!response.ok) {
+      throw new Error(`Firecrawl scrape failed with ${response.status}`)
+    }
+
+    const payload = (await response.json()) as {
+      success?: boolean
+      data?: { markdown?: string }
+    }
+
+    return payload.data?.markdown?.trim() || null
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+export async function runWebDiscovery(input: WebDiscoveryInput): Promise<{
+  plan: WebSearchPlan
+  discovery: WebDiscoveryReport
+  scrape: WebScrapeReport
+  documents: WebDocument[]
+}> {
+  const plan = queryPlan(input)
+  const warnings: string[] = []
+  let results: WebDiscoveryResult[]
+
+  if (plan.provider === "mock") {
+    results = mockResults(input, plan)
+    warnings.push("Mock web discovery used because MOCK_MODE is enabled or EXA_API_KEY is absent.")
+  } else {
+    try {
+      results = await exaResults(plan)
+    } catch (error) {
+      results = mockResults(input, { ...plan, provider: "mock" })
+      warnings.push(
+        `Exa unavailable; fell back to mock web discovery. ${
+          error instanceof Error ? error.message : "Unknown provider error."
+        }`
+      )
+    }
+  }
+
+  const selected = results.filter((result) => result.selected).slice(0, plan.maxResults)
+  const documents: WebDocument[] = []
+  const scrapeRecords: WebScrapeRecord[] = []
+
+  for (const result of selected) {
+    if (result.text && result.text.trim().length > 80) {
+      documents.push({ result, markdown: result.text.trim() })
+      scrapeRecords.push({
+        resultId: result.id,
+        url: result.url,
+        provider: result.provider,
+        status: "used_search_text",
+        markdownLength: result.text.trim().length,
+      })
+      continue
+    }
+
+    try {
+      const markdown = await firecrawlMarkdown(result.url)
+      if (markdown) {
+        documents.push({ result, markdown })
+        scrapeRecords.push({
+          resultId: result.id,
+          url: result.url,
+          provider: "firecrawl",
+          status: "scraped",
+          markdownLength: markdown.length,
+        })
+      } else {
+        scrapeRecords.push({
+          resultId: result.id,
+          url: result.url,
+          provider: "firecrawl",
+          status: "skipped",
+          markdownLength: 0,
+          warning: "No search text was available and Firecrawl was not configured.",
+        })
+      }
+    } catch (error) {
+      scrapeRecords.push({
+        resultId: result.id,
+        url: result.url,
+        provider: "firecrawl",
+        status: "failed",
+        markdownLength: 0,
+        warning: error instanceof Error ? error.message : "Unknown scrape error.",
+      })
+    }
+  }
+
+  if (documents.length === 0 && plan.provider !== "mock") {
+    const mockPlan = { ...plan, provider: "mock" as const }
+    const mockSelected = mockResults(input, mockPlan)
+    warnings.push("Real web providers returned no usable text; fell back to mock web fixtures.")
+
+    return {
+      plan: { ...mockPlan, warnings },
+      discovery: {
+        projectId: input.projectId,
+        provider: "mock",
+        resultCount: mockSelected.length,
+        selectedCount: mockSelected.length,
+        skippedCount: 0,
+        results: mockSelected,
+        warnings,
+        generatedAt: now(),
+      },
+      scrape: {
+        projectId: input.projectId,
+        provider: "mock",
+        scrapedCount: 0,
+        usedSearchTextCount: mockSelected.length,
+        skippedCount: 0,
+        failedCount: 0,
+        records: mockSelected.map((result) => ({
+          resultId: result.id,
+          url: result.url,
+          provider: "mock",
+          status: "used_search_text",
+          markdownLength: result.text?.length ?? 0,
+        })),
+        warnings,
+        generatedAt: now(),
+      },
+      documents: mockSelected.map((result) => ({
+        result,
+        markdown: result.text ?? "",
+      })),
+    }
+  }
+
+  const scrapeWarnings = scrapeRecords.flatMap((record) => record.warning ? [record.warning] : [])
+
+  return {
+    plan: { ...plan, warnings },
+    discovery: {
+      projectId: input.projectId,
+      provider: results[0]?.provider ?? plan.provider,
+      resultCount: results.length,
+      selectedCount: selected.length,
+      skippedCount: results.filter((result) => !result.selected).length,
+      results,
+      warnings,
+      generatedAt: now(),
+    },
+    scrape: {
+      projectId: input.projectId,
+      provider: scrapeRecords.some((record) => record.provider === "firecrawl")
+        ? "firecrawl"
+        : results[0]?.provider ?? plan.provider,
+      scrapedCount: scrapeRecords.filter((record) => record.status === "scraped").length,
+      usedSearchTextCount: scrapeRecords.filter((record) => record.status === "used_search_text").length,
+      skippedCount: scrapeRecords.filter((record) => record.status === "skipped").length,
+      failedCount: scrapeRecords.filter((record) => record.status === "failed").length,
+      records: scrapeRecords,
+      warnings: [...new Set([...warnings, ...scrapeWarnings])],
+      generatedAt: now(),
+    },
+    documents,
+  }
+}

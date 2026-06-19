@@ -26,6 +26,7 @@ export function NewProjectForm() {
   const [maxSources, setMaxSources] = useState("8")
   const [selectedFileCount, setSelectedFileCount] = useState(0)
   const [permissionAttested, setPermissionAttested] = useState(false)
+  const [allowWebDiscovery, setAllowWebDiscovery] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -38,6 +39,7 @@ export function NewProjectForm() {
     formData.set("vertical", vertical)
     formData.set("maxSources", maxSources)
     formData.set("permissionAttested", permissionAttested ? "true" : "false")
+    formData.set("allowWebDiscovery", allowWebDiscovery ? "true" : "false")
 
     if (selectedFileCount > 0 && !permissionAttested) {
       setError("Confirm source rights before uploading files.")
@@ -186,7 +188,6 @@ export function NewProjectForm() {
           "Generate practice questions",
           "Generate eval set",
           "Generate Castform export",
-          "Use mock seed data if APIs are unavailable",
         ].map((label) => (
           <label
             key={label}
@@ -196,6 +197,17 @@ export function NewProjectForm() {
             <span>{label}</span>
           </label>
         ))}
+        <label className="flex min-h-12 items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm">
+          <Checkbox
+            checked={allowWebDiscovery}
+            onCheckedChange={(checked) => setAllowWebDiscovery(checked === true)}
+          />
+          <span>Allow web discovery when uploads are absent</span>
+        </label>
+        <label className="flex min-h-12 items-center gap-3 rounded-lg border border-border px-3 py-2 text-sm">
+          <Checkbox defaultChecked />
+          <span>Use mock seed data if APIs are unavailable</span>
+        </label>
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">

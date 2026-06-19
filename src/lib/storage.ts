@@ -18,6 +18,7 @@ import type { Project } from "@/types/project"
 import type { RewardSpec } from "@/types/rewards"
 import type { SourceConfig, UploadManifest, UploadParseReport } from "@/types/source-intake"
 import type { ActionTrace, ChatTrace, FeedbackTrace } from "@/types/traces"
+import type { WebDiscoveryReport, WebScrapeReport, WebSearchPlan } from "@/types/web-sources"
 
 export type ArtifactPreview = {
   path: string
@@ -55,8 +56,14 @@ export type ProjectArtifacts = {
   adapterTracePreview: string
   uploadManifest?: UploadManifest
   uploadParseReport?: UploadParseReport
+  webSearchPlan?: WebSearchPlan
+  webDiscovery?: WebDiscoveryReport
+  webScrapeReport?: WebScrapeReport
   uploadManifestPreview: string
   uploadParseReportPreview: string
+  webSearchPlanPreview: string
+  webDiscoveryPreview: string
+  webScrapeReportPreview: string
 }
 
 type CreateProjectInput = {
@@ -333,12 +340,18 @@ export async function readProjectArtifacts(
     adapterTraceJson,
     uploadManifestJson,
     uploadParseReportJson,
+    webSearchPlanJson,
+    webDiscoveryJson,
+    webScrapeReportJson,
     importSummaryPreview,
     permissionsPreview,
     qualityTagsPreview,
     adapterTracePreview,
     uploadManifestPreview,
     uploadParseReportPreview,
+    webSearchPlanPreview,
+    webDiscoveryPreview,
+    webScrapeReportPreview,
   ] = await Promise.all([
     readTextIfExists(projectArtifactPath(projectId, "source_manifest.json")),
     readTextIfExists(projectArtifactPath(projectId, "chunks.jsonl")),
@@ -368,12 +381,18 @@ export async function readProjectArtifacts(
     readTextIfExists(projectArtifactPath(projectId, "imports", "adapter_trace.json")),
     readTextIfExists(projectArtifactPath(projectId, "uploads", "upload_manifest.json")),
     readTextIfExists(projectArtifactPath(projectId, "imports", "upload_parse_report.json")),
+    readTextIfExists(projectArtifactPath(projectId, "imports", "web_search_plan.json")),
+    readTextIfExists(projectArtifactPath(projectId, "imports", "web_discovery.json")),
+    readTextIfExists(projectArtifactPath(projectId, "imports", "web_scrape_report.json")),
     readArtifactPreview(projectId, "imports/import_summary.json"),
     readArtifactPreview(projectId, "imports/permissions.json"),
     readArtifactPreview(projectId, "imports/quality_tags.json"),
     readArtifactPreview(projectId, "imports/adapter_trace.json"),
     readArtifactPreview(projectId, "uploads/upload_manifest.json"),
     readArtifactPreview(projectId, "imports/upload_parse_report.json"),
+    readArtifactPreview(projectId, "imports/web_search_plan.json"),
+    readArtifactPreview(projectId, "imports/web_discovery.json"),
+    readArtifactPreview(projectId, "imports/web_scrape_report.json"),
   ])
   const modelGoal = modelGoalJson
     ? (JSON.parse(modelGoalJson) as ModelGoal)
@@ -395,6 +414,15 @@ export async function readProjectArtifacts(
     : undefined
   const uploadParseReport = uploadParseReportJson
     ? (JSON.parse(uploadParseReportJson) as UploadParseReport)
+    : undefined
+  const webSearchPlan = webSearchPlanJson
+    ? (JSON.parse(webSearchPlanJson) as WebSearchPlan)
+    : undefined
+  const webDiscovery = webDiscoveryJson
+    ? (JSON.parse(webDiscoveryJson) as WebDiscoveryReport)
+    : undefined
+  const webScrapeReport = webScrapeReportJson
+    ? (JSON.parse(webScrapeReportJson) as WebScrapeReport)
     : undefined
 
   return {
@@ -425,6 +453,9 @@ export async function readProjectArtifacts(
       : [],
     uploadManifest,
     uploadParseReport,
+    webSearchPlan,
+    webDiscovery,
+    webScrapeReport,
     modelGoalPreview: modelGoalPreview.content,
     sourcePlanPreview: sourcePlanPreview.content,
     trainingPlanPreview: trainingPlanPreview.content,
@@ -436,5 +467,8 @@ export async function readProjectArtifacts(
     adapterTracePreview: adapterTracePreview.content,
     uploadManifestPreview: uploadManifestPreview.content,
     uploadParseReportPreview: uploadParseReportPreview.content,
+    webSearchPlanPreview: webSearchPlanPreview.content,
+    webDiscoveryPreview: webDiscoveryPreview.content,
+    webScrapeReportPreview: webScrapeReportPreview.content,
   }
 }

@@ -42,12 +42,14 @@ export function defaultSourceConfig(input?: {
   allowedDomains?: string
   maxSources?: number
   permissionAttested?: boolean
+  allowWebDiscovery?: boolean
 }): SourceConfig {
   return {
     vertical: input?.vertical,
     allowedDomains: input?.allowedDomains,
     maxSources: input?.maxSources ?? Number(process.env.MAX_SOURCES ?? 12),
     permissionAttested: input?.permissionAttested ?? false,
+    allowWebDiscovery: input?.allowWebDiscovery ?? true,
     uploadedFileCount: 0,
     parseableFileCount: 0,
     skippedFileCount: 0,

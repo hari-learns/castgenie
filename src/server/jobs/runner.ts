@@ -24,7 +24,8 @@ import type {
 } from "@/types/imports"
 import type { BuildStep, Project, ProjectStatus } from "@/types/project"
 import type { RewardSpec } from "@/types/rewards"
-import type { UploadParseReport } from "@/types/source-intake"
+import type { SourceConfig, UploadParseReport } from "@/types/source-intake"
+import type { WebDiscoveryReport, WebScrapeReport, WebSearchPlan } from "@/types/web-sources"
 
 const stepDefinitions: Array<{
   id: string
@@ -103,6 +104,9 @@ type GeneratedBundle = {
   qualityTags: QualityTagRecord[]
   adapterTrace: AdapterTraceRecord[]
   uploadParseReport?: UploadParseReport
+  webSearchPlan?: WebSearchPlan
+  webDiscovery?: WebDiscoveryReport
+  webScrapeReport?: WebScrapeReport
   castformFiles: Array<{ path: string; content: string }>
 }
 
@@ -156,7 +160,7 @@ export async function runBuildJob(projectId: string) {
 
   try {
     const plan = planProject({ projectId, prompt: project.prompt })
-    const generated = await generateBundle(projectId, plan)
+    const generated = await generateBundle(projectId, plan, project.sourceConfig)
     const steps: BuildStep[] = []
 
     for (const [index, step] of stepDefinitions.entries()) {
@@ -206,6 +210,9 @@ export async function runBuildJob(projectId: string) {
       "imports/quality_tags.json",
       "imports/adapter_trace.json",
       ...(generated.uploadParseReport ? ["imports/upload_parse_report.json"] : []),
+      ...(generated.webSearchPlan ? ["imports/web_search_plan.json"] : []),
+      ...(generated.webDiscovery ? ["imports/web_discovery.json"] : []),
+      ...(generated.webScrapeReport ? ["imports/web_scrape_report.json"] : []),
       ...(project.sourceConfig ? ["uploads/upload_manifest.json"] : []),
       "domain_graph.json",
       "source_manifest.json",
@@ -280,6 +287,15 @@ async function writeGeneratedArtifacts(
   if (generated.uploadParseReport) {
     await writeArtifactJson(projectId, "imports/upload_parse_report.json", generated.uploadParseReport)
   }
+  if (generated.webSearchPlan) {
+    await writeArtifactJson(projectId, "imports/web_search_plan.json", generated.webSearchPlan)
+  }
+  if (generated.webDiscovery) {
+    await writeArtifactJson(projectId, "imports/web_discovery.json", generated.webDiscovery)
+  }
+  if (generated.webScrapeReport) {
+    await writeArtifactJson(projectId, "imports/web_scrape_report.json", generated.webScrapeReport)
+  }
   await writeArtifactJson(projectId, "domain_graph.json", generated.domainGraph)
   await writeArtifactJson(projectId, "source_manifest.json", generated.sources)
   await writeArtifactJson(projectId, "rewards/reward_spec.json", generated.rewardSpec)
@@ -324,18 +340,25 @@ async function writeGeneratedArtifacts(
   )
 }
 
-async function generateBundle(projectId: string, plan: PlannedProject): Promise<GeneratedBundle> {
+async function generateBundle(
+  projectId: string,
+  plan: PlannedProject,
+  sourceConfig?: SourceConfig
+): Promise<GeneratedBundle> {
   const uploaded = await parseUploadedDocuments(projectId)
+  const effectiveSourceConfig = uploaded.manifest?.sourceConfig ?? sourceConfig
   const imported = await runDomainImport({
     projectId,
     prompt: plan.modelGoal.userIntent,
     domainKind: plan.kind,
     sourceKinds: plan.sourcePlan.requiredSourceKinds,
+    allowedDomains: effectiveSourceConfig?.allowedDomains,
     mockMode: process.env.MOCK_MODE !== "false",
+    allowWebDiscovery: effectiveSourceConfig?.allowWebDiscovery,
     sourceStrategy: uploaded.manifest?.files.length ? "uploaded_file" : undefined,
     uploadedFilePaths: uploaded.manifest?.files.map((file) => file.relativePath),
     limits: {
-      maxSources: uploaded.manifest?.sourceConfig.maxSources ?? Number(process.env.MAX_SOURCES ?? 12),
+      maxSources: effectiveSourceConfig?.maxSources ?? Number(process.env.MAX_SOURCES ?? 12),
       maxChunks: Number(process.env.MAX_CHUNKS ?? 300),
       maxQaPairs: Number(process.env.MAX_QA_PAIRS ?? 60),
     },
@@ -384,6 +407,9 @@ async function generateBundle(projectId: string, plan: PlannedProject): Promise<
     qualityTags: imported.qualityTags,
     adapterTrace: imported.adapterTrace,
     uploadParseReport: imported.uploadParseReport ?? uploaded.report ?? undefined,
+    webSearchPlan: imported.webSearchPlan,
+    webDiscovery: imported.webDiscovery,
+    webScrapeReport: imported.webScrapeReport,
     castformFiles,
   }
 }

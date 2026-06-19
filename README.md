@@ -9,8 +9,9 @@ CastGenie is a local-first prototype for turning an English model intent into a 
 - Wave 5: local RAG assistant, generated actions, traces, feedback, optional Gemini provider.
 - Wave 6: artifact browser and Castform-ready ZIP export.
 - Wave 7: real local source intake for TXT, MD, JSON, JSONL, and CSV uploads.
+- Wave 8: automatic web discovery with mock-first Exa/Firecrawl provider adapters.
 
-This is not production infrastructure yet. Local JSON storage is a short-term path to prove behavior before replacing it with Postgres, object storage, auth, and real background workers.
+This is intentionally simple local infrastructure. Local JSON storage is the source of truth for this project.
 
 ## Run Locally
 
@@ -38,9 +39,11 @@ LLM_PROVIDER=mock
 GEMINI_API_KEY=
 GEMINI_BASE_URL=https://generativelanguage.googleapis.com
 GEMINI_MODEL=gemini-3.5-flash
+EXA_API_KEY=
+FIRECRAWL_API_KEY=
 ```
 
-`MOCK_MODE=true` must work without provider keys. Set `GEMINI_API_KEY` only in `.env.local`; never commit it.
+`MOCK_MODE=true` must work without provider keys. Set provider keys only in `.env.local`; never commit them.
 
 ## Local Storage
 
@@ -58,6 +61,9 @@ Generated project runs are ignored by Git. Important generated paths include:
 - `datasets/*.jsonl`
 - `imports/*.json`
 - `uploads/upload_manifest.json`
+- `imports/web_search_plan.json`
+- `imports/web_discovery.json`
+- `imports/web_scrape_report.json`
 - `logs/*.jsonl`
 - `castform_project/`
 
@@ -84,6 +90,17 @@ Default upload limits:
 - 8 MB total uploaded source size
 
 PDF extraction is intentionally deferred. Low-quality extraction would contaminate chunks, train/eval rows, and reward artifacts.
+
+## Web Discovery
+
+Wave 8 can discover public web sources when no uploaded source files are available. Mock web discovery is used when `MOCK_MODE=true` or `EXA_API_KEY` is absent.
+
+Optional real providers:
+
+- Exa search: `EXA_API_KEY`
+- Firecrawl scrape: `FIRECRAWL_API_KEY`
+
+Allowed domains from the project form are passed to Exa as include-domain constraints. Web sources are provenance-tracked and still require source-permission review before real training.
 
 ## Castform Export
 

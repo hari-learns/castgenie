@@ -1,5 +1,6 @@
 import type { ChunkRecord, DocumentRecord, QAPair, SourceRecord } from "@/types/artifacts"
 import type { UploadParseReport } from "@/types/source-intake"
+import type { WebDiscoveryReport, WebScrapeReport, WebSearchPlan } from "@/types/web-sources"
 
 export type DomainImportKind = "ca_edtech" | "owasp_security" | "generic"
 
@@ -8,6 +9,8 @@ export type ImportSourceStrategy =
   | "wire_neurons_fixture"
   | "local_json_folder"
   | "uploaded_file"
+  | "web_search"
+  | "web_scrape"
   | "codebase_placeholder"
 
 export type ImportInput = {
@@ -15,7 +18,9 @@ export type ImportInput = {
   prompt: string
   domainKind: DomainImportKind
   sourceKinds: string[]
+  allowedDomains?: string
   mockMode: boolean
+  allowWebDiscovery?: boolean
   sourceStrategy?: ImportSourceStrategy
   localFolderPath?: string
   uploadedFilePaths?: string[]
@@ -79,6 +84,9 @@ export type ImportedDomainBundle = {
   qualityTags: QualityTagRecord[]
   adapterTrace: AdapterTraceRecord[]
   uploadParseReport?: UploadParseReport
+  webSearchPlan?: WebSearchPlan
+  webDiscovery?: WebDiscoveryReport
+  webScrapeReport?: WebScrapeReport
 }
 
 export type DomainImportAdapter = {

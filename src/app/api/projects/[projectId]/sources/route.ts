@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
-import { readProject, updateProject } from "@/lib/storage"
+import { readProject, readProjectArtifacts, updateProject } from "@/lib/storage"
 import { runBuildJob } from "@/server/jobs/runner"
 import {
   defaultSourceConfig,
@@ -20,6 +20,7 @@ const sourceFormSchema = z.object({
   allowedDomains: z.string().trim().max(2000).optional(),
   maxSources: z.coerce.number().int().min(1).max(50).optional(),
   permissionAttested: z.boolean(),
+  allowWebDiscovery: z.boolean().optional(),
   rebuild: z.boolean(),
 })
 
@@ -31,15 +32,19 @@ export async function GET(_request: Request, { params }: RouteProps) {
     return NextResponse.json({ error: "Project not found" }, { status: 404 })
   }
 
-  const [manifest, parsed] = await Promise.all([
+  const [manifest, parsed, artifacts] = await Promise.all([
     readUploadManifest(projectId),
     parseUploadedDocuments(projectId),
+    readProjectArtifacts(projectId),
   ])
 
   return NextResponse.json({
     sourceConfig: project.sourceConfig ?? manifest?.sourceConfig ?? null,
     uploadManifest: manifest,
     uploadParseReport: parsed.report,
+    webSearchPlan: artifacts.webSearchPlan,
+    webDiscovery: artifacts.webDiscovery,
+    webScrapeReport: artifacts.webScrapeReport,
   })
 }
 
@@ -58,6 +63,9 @@ export async function POST(request: Request, { params }: RouteProps) {
     permissionAttested:
       formData.get("permissionAttested") === "true" ||
       formData.get("permissionAttested") === "on",
+    allowWebDiscovery:
+      formData.get("allowWebDiscovery") === "true" ||
+      formData.get("allowWebDiscovery") === "on",
     rebuild:
       formData.get("rebuild") === "true" ||
       formData.get("rebuild") === "on",
@@ -90,6 +98,8 @@ export async function POST(request: Request, { params }: RouteProps) {
     maxSources: parsed.data.maxSources,
     permissionAttested:
       parsed.data.permissionAttested || Boolean(project.sourceConfig?.permissionAttested),
+    allowWebDiscovery:
+      parsed.data.allowWebDiscovery ?? Boolean(project.sourceConfig?.allowWebDiscovery),
   })
 
   let manifest
@@ -102,6 +112,7 @@ export async function POST(request: Request, { params }: RouteProps) {
         allowedDomains: sourceConfig.allowedDomains,
         maxSources: sourceConfig.maxSources,
         permissionAttested: sourceConfig.permissionAttested,
+        allowWebDiscovery: sourceConfig.allowWebDiscovery,
       },
     })
   } catch (error) {
@@ -119,7 +130,10 @@ export async function POST(request: Request, { params }: RouteProps) {
   await updateProject(projectId, { sourceConfig: manifest.sourceConfig })
 
   const build = parsed.data.rebuild ? await runBuildJob(projectId) : null
-  const parsedUploads = await parseUploadedDocuments(projectId)
+  const [parsedUploads, artifacts] = await Promise.all([
+    parseUploadedDocuments(projectId),
+    readProjectArtifacts(projectId),
+  ])
 
   return NextResponse.json({
     projectId,
@@ -127,5 +141,8 @@ export async function POST(request: Request, { params }: RouteProps) {
     status: build?.project.status ?? project.status,
     uploadManifest: manifest,
     uploadParseReport: parsedUploads.report,
+    webSearchPlan: artifacts.webSearchPlan,
+    webDiscovery: artifacts.webDiscovery,
+    webScrapeReport: artifacts.webScrapeReport,
   })
 }

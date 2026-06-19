@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { RefreshCwIcon, UploadIcon } from "lucide-react"
 
 import type { SourceConfig, UploadManifest, UploadParseReport } from "@/types/source-intake"
+import type { WebDiscoveryReport, WebScrapeReport } from "@/types/web-sources"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -32,6 +33,8 @@ type ProjectSourceManagerProps = {
   sourceConfig?: SourceConfig
   uploadManifest?: UploadManifest
   uploadParseReport?: UploadParseReport
+  webDiscovery?: WebDiscoveryReport
+  webScrapeReport?: WebScrapeReport
 }
 
 function formatBytes(size: number) {
@@ -45,11 +48,16 @@ export function ProjectSourceManager({
   sourceConfig,
   uploadManifest,
   uploadParseReport,
+  webDiscovery,
+  webScrapeReport,
 }: ProjectSourceManagerProps) {
   const router = useRouter()
   const [selectedFileCount, setSelectedFileCount] = useState(0)
   const [permissionAttested, setPermissionAttested] = useState(
     Boolean(sourceConfig?.permissionAttested)
+  )
+  const [allowWebDiscovery, setAllowWebDiscovery] = useState(
+    sourceConfig?.allowWebDiscovery ?? true
   )
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -66,6 +74,7 @@ export function ProjectSourceManager({
     setIsSubmitting(true)
     const formData = new FormData(event.currentTarget)
     formData.set("permissionAttested", permissionAttested ? "true" : "false")
+    formData.set("allowWebDiscovery", allowWebDiscovery ? "true" : "false")
     formData.set("rebuild", "true")
 
     const response = await fetch(`/api/projects/${projectId}/sources`, {
@@ -127,6 +136,14 @@ export function ProjectSourceManager({
                 onCheckedChange={(checked) => setPermissionAttested(checked === true)}
               />
               <span>I have rights to use these sources.</span>
+            </label>
+
+            <label className="flex items-start gap-3 rounded-lg border border-border px-3 py-3 text-sm">
+              <Checkbox
+                checked={allowWebDiscovery}
+                onCheckedChange={(checked) => setAllowWebDiscovery(checked === true)}
+              />
+              <span>Allow web discovery when uploads are absent.</span>
             </label>
 
             <div className="flex items-end">
@@ -209,6 +226,78 @@ export function ProjectSourceManager({
           ) : (
             <p className="text-sm text-muted-foreground">
               No uploaded source files have been added to this project.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Web discovery state</CardTitle>
+          <CardDescription>
+            Public-source discovery and scrape status for this project.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="flex flex-wrap gap-2">
+            <Badge variant={sourceConfig?.allowWebDiscovery ? "secondary" : "outline"}>
+              web discovery: {sourceConfig?.allowWebDiscovery ? "enabled" : "disabled"}
+            </Badge>
+            <Badge variant="secondary">
+              discovered: {webDiscovery?.resultCount ?? 0}
+            </Badge>
+            <Badge variant="secondary">
+              selected: {webDiscovery?.selectedCount ?? 0}
+            </Badge>
+            <Badge variant="outline">
+              scraped: {webScrapeReport?.scrapedCount ?? 0}
+            </Badge>
+            <Badge variant="outline">
+              search text: {webScrapeReport?.usedSearchTextCount ?? 0}
+            </Badge>
+          </div>
+
+          {(webDiscovery?.warnings.length || webScrapeReport?.warnings.length) ? (
+            <Alert>
+              <AlertTitle>Web source warnings</AlertTitle>
+              <AlertDescription>
+                {[...(webDiscovery?.warnings ?? []), ...(webScrapeReport?.warnings ?? [])]
+                  .filter(Boolean)
+                  .join(" ")}
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
+          {webDiscovery?.results.length ? (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Provider</TableHead>
+                    <TableHead>Domain</TableHead>
+                    <TableHead>Selected</TableHead>
+                    <TableHead>Permission</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {webDiscovery.results.map((result) => (
+                    <TableRow key={result.id}>
+                      <TableCell className="min-w-72 font-medium">
+                        {result.title}
+                      </TableCell>
+                      <TableCell>{result.provider}</TableCell>
+                      <TableCell>{result.domain}</TableCell>
+                      <TableCell>{result.selected ? "yes" : "no"}</TableCell>
+                      <TableCell>{result.permissionStatus}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No web discovery report has been generated for this project.
             </p>
           )}
         </CardContent>

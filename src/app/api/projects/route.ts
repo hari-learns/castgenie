@@ -15,6 +15,7 @@ const createProjectSchema = z.object({
   vertical: z.string().trim().max(80).optional(),
   allowedDomains: z.string().trim().max(2000).optional(),
   maxSources: z.coerce.number().int().min(1).max(50).optional(),
+  allowWebDiscovery: z.coerce.boolean().optional(),
 })
 
 const multipartProjectSchema = z.object({
@@ -24,6 +25,7 @@ const multipartProjectSchema = z.object({
   allowedDomains: z.string().trim().max(2000).optional(),
   maxSources: z.coerce.number().int().min(1).max(50).optional(),
   permissionAttested: z.coerce.boolean().optional(),
+  allowWebDiscovery: z.coerce.boolean().optional(),
 })
 
 function defaultName(prompt: string) {
@@ -59,6 +61,9 @@ export async function POST(request: Request) {
       permissionAttested:
         formData.get("permissionAttested") === "true" ||
         formData.get("permissionAttested") === "on",
+      allowWebDiscovery:
+        formData.get("allowWebDiscovery") === "true" ||
+        formData.get("allowWebDiscovery") === "on",
     })
 
     if (!parsed.success) {
@@ -89,6 +94,10 @@ export async function POST(request: Request) {
       allowedDomains: parsed.data.allowedDomains,
       maxSources: parsed.data.maxSources,
       permissionAttested: Boolean(parsed.data.permissionAttested),
+      allowWebDiscovery:
+        parsed.data.allowWebDiscovery === undefined
+          ? files.length === 0
+          : parsed.data.allowWebDiscovery,
     })
     const project = await createProject({
       id: projectId,
@@ -107,6 +116,7 @@ export async function POST(request: Request) {
             allowedDomains: parsed.data.allowedDomains,
             maxSources: parsed.data.maxSources ?? sourceConfig.maxSources,
             permissionAttested: true,
+            allowWebDiscovery: sourceConfig.allowWebDiscovery,
           },
         })
         await updateProject(project.id, { sourceConfig: manifest.sourceConfig })
@@ -156,6 +166,7 @@ export async function POST(request: Request) {
       allowedDomains: parsed.data.allowedDomains,
       maxSources: parsed.data.maxSources,
       permissionAttested: false,
+      allowWebDiscovery: parsed.data.allowWebDiscovery ?? true,
     }),
   })
   const build = await runBuildJob(project.id)
