@@ -13,6 +13,8 @@ const previewPaths = [
   "domain_spec.json",
   "domain_graph.json",
   "source_manifest.json",
+  "uploads/upload_manifest.json",
+  "imports/upload_parse_report.json",
   "chunks.jsonl",
   "datasets/train_qa.jsonl",
   "datasets/eval_qa.jsonl",
@@ -67,6 +69,7 @@ export function safeProjectArtifactPath(projectId: string, relativePath: string)
 function groupFor(relativePath: string): ArtifactGroup {
   if (relativePath === "manifest.json" || relativePath.endsWith("_spec.json")) return "manifest"
   if (relativePath.startsWith("imports/")) return "imports"
+  if (relativePath.startsWith("uploads/")) return "uploads"
   if (relativePath.includes("source") || relativePath === "sources.jsonl") return "sources"
   if (relativePath.startsWith("documents/") || relativePath === "chunks.jsonl") return "corpus"
   if (relativePath.startsWith("datasets/")) return "datasets"
@@ -254,6 +257,8 @@ export async function buildProjectZip(projectId: string) {
         "domain_spec.json",
         "domain_graph.json",
         "source_manifest.json",
+        "uploads/upload_manifest.json",
+        "imports/upload_parse_report.json",
         "chunks.jsonl",
         "datasets/train_qa.jsonl",
         "datasets/eval_qa.jsonl",

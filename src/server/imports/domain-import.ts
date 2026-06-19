@@ -1,4 +1,5 @@
 import caFixture from "@/server/imports/fixtures/wire-neurons-ca-fixture.json"
+import { parseUploadedDocuments } from "@/server/sources/source-intake"
 import type { ChunkRecord, DocumentRecord, QAPair, SourceRecord } from "@/types/artifacts"
 import type {
   AdapterTraceRecord,
@@ -175,6 +176,7 @@ function makeBundle(input: {
   warnings: string[]
   permissionNote: string
   chunks?: ChunkRecord[]
+  uploadParseReport?: ImportedDomainBundle["uploadParseReport"]
 }): ImportedDomainBundle {
   const sources = input.seeds.map(makeSource)
   const documents = input.seeds.map((seed, index) => makeDocument(input.projectId, seed, index))
@@ -201,6 +203,7 @@ function makeBundle(input: {
     permissions: permissionsFromSources(sources, input.permissionNote),
     qualityTags: input.qualityTags,
     adapterTrace: input.trace,
+    uploadParseReport: input.uploadParseReport,
   }
 }
 
@@ -553,28 +556,59 @@ const localJsonFolderAdapter: DomainImportAdapter = {
 }
 
 const uploadPlaceholderAdapter: DomainImportAdapter = {
-  id: "upload-placeholder",
-  label: "Upload placeholder adapter",
+  id: "uploaded-file",
+  label: "Uploaded file adapter",
   strategy: "uploaded_file",
   async detect(input) {
-    return input.sourceStrategy === "uploaded_file" || Boolean(input.uploadedFilePaths?.length)
+    const uploaded = await parseUploadedDocuments(input.projectId)
+    return uploaded.documents.length > 0
   },
   async import(input, trace) {
-    const fallback = await syntheticSeedAdapter.import(input, trace)
-    return {
-      ...fallback,
-      adapterId: uploadPlaceholderAdapter.id,
-      summary: {
-        ...fallback.summary,
-        adapterId: uploadPlaceholderAdapter.id,
-        adapterLabel: uploadPlaceholderAdapter.label,
-        strategy: "uploaded_file",
-        warnings: [
-          "Uploaded file import is a placeholder in Wave 4.",
-          ...fallback.summary.warnings,
-        ],
-      },
-    }
+    const uploaded = await parseUploadedDocuments(input.projectId)
+    const seeds: SourceDocumentSeed[] = uploaded.documents.map((document, index) => ({
+      sourceId: `upload_source_${String(index + 1).padStart(3, "0")}`,
+      documentId: `upload_doc_${String(index + 1).padStart(3, "0")}`,
+      title: document.title,
+      url: `upload://${document.upload.storedName}`,
+      provider: "user_upload",
+      domain: uploaded.manifest?.sourceConfig.allowedDomains || "user-provided",
+      permissionStatus: uploaded.manifest?.sourceConfig.permissionAttested
+        ? "user_provided"
+        : "unknown",
+      notes: [
+        `Uploaded file: ${document.upload.originalName}`,
+        `Stored path: ${document.upload.relativePath}`,
+        uploaded.manifest?.sourceConfig.permissionAttested
+          ? "User attested source rights at upload time."
+          : "No upload permission attestation recorded.",
+      ].join(" "),
+      text: document.text,
+    }))
+
+    return makeBundle({
+      adapter: uploadPlaceholderAdapter,
+      projectId: input.projectId,
+      strategy: "uploaded_file",
+      seeds: seeds.slice(0, input.limits.maxSources),
+      domainGraph: genericGraph(input.domainKind, seeds),
+      questions: [],
+      qualityTags: seeds.map((seed) => ({
+        nodeId: `source-node-${seed.sourceId}`,
+        domain: input.domainKind,
+        tags: ["uploaded", seed.provider, seed.permissionStatus],
+      })),
+      trace,
+      chapterCount: 0,
+      topicCount: seeds.length,
+      warnings: [
+        ...(uploaded.report?.warnings ?? []),
+        "Uploaded files are treated as user-provided source material; licensing is not independently verified.",
+      ],
+      permissionNote: uploaded.manifest?.sourceConfig.permissionAttested
+        ? "User attested rights to use uploaded sources."
+        : "Uploaded sources lack permission attestation and must be reviewed before training.",
+      uploadParseReport: uploaded.report ?? undefined,
+    })
   },
 }
 

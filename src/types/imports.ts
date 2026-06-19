@@ -1,4 +1,5 @@
 import type { ChunkRecord, DocumentRecord, QAPair, SourceRecord } from "@/types/artifacts"
+import type { UploadParseReport } from "@/types/source-intake"
 
 export type DomainImportKind = "ca_edtech" | "owasp_security" | "generic"
 
@@ -77,6 +78,7 @@ export type ImportedDomainBundle = {
   permissions: PermissionRecord[]
   qualityTags: QualityTagRecord[]
   adapterTrace: AdapterTraceRecord[]
+  uploadParseReport?: UploadParseReport
 }
 
 export type DomainImportAdapter = {

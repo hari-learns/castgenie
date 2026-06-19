@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react"
 import { useRouter } from "next/navigation"
+import { UploadIcon } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -23,6 +24,8 @@ export function NewProjectForm() {
   const router = useRouter()
   const [vertical, setVertical] = useState("ca-accounting")
   const [maxSources, setMaxSources] = useState("8")
+  const [selectedFileCount, setSelectedFileCount] = useState(0)
+  const [permissionAttested, setPermissionAttested] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -32,21 +35,19 @@ export function NewProjectForm() {
     setIsSubmitting(true)
 
     const formData = new FormData(event.currentTarget)
-    const name = String(formData.get("name") ?? "").trim()
-    const prompt = String(formData.get("prompt") ?? "").trim()
-    const allowedDomains = String(formData.get("allowedDomains") ?? "").trim()
+    formData.set("vertical", vertical)
+    formData.set("maxSources", maxSources)
+    formData.set("permissionAttested", permissionAttested ? "true" : "false")
+
+    if (selectedFileCount > 0 && !permissionAttested) {
+      setError("Confirm source rights before uploading files.")
+      setIsSubmitting(false)
+      return
+    }
+
     const response = await fetch("/api/projects", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        name: name || undefined,
-        prompt,
-        allowedDomains: allowedDomains || undefined,
-        vertical,
-        maxSources,
-      }),
+      body: formData,
     })
 
     if (!response.ok) {
@@ -111,6 +112,43 @@ export function NewProjectForm() {
           defaultValue="Build me an expert assistant for CA Final Advanced Accounting in India. It should explain consolidation concepts, solve journal-entry style problems step-by-step, generate practice questions, and cite the source material."
           required
         />
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-[1fr_18rem]">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="source-files">Source files</Label>
+          <div className="rounded-lg border border-dashed border-border p-4">
+            <div className="flex items-start gap-3">
+              <UploadIcon aria-hidden="true" className="mt-1 size-4" />
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <Input
+                  id="source-files"
+                  name="sources"
+                  type="file"
+                  multiple
+                  accept=".txt,.md,.json,.jsonl,.csv,.pdf"
+                  onChange={(event) =>
+                    setSelectedFileCount(event.currentTarget.files?.length ?? 0)
+                  }
+                />
+                <p className="text-xs leading-5 text-muted-foreground">
+                  Parses TXT, MD, JSON, JSONL, and CSV. PDFs are stored for
+                  provenance but skipped until a later extraction wave.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <label className="flex min-h-24 items-start gap-3 rounded-lg border border-border px-3 py-3 text-sm">
+          <Checkbox
+            checked={permissionAttested}
+            onCheckedChange={(checked) => setPermissionAttested(checked === true)}
+          />
+          <span>
+            I have rights to use uploaded sources for this project.
+          </span>
+        </label>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[1fr_16rem]">

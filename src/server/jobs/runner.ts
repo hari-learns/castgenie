@@ -11,6 +11,7 @@ import {
 } from "@/lib/storage"
 import { runDomainImport } from "@/server/imports/domain-import"
 import { planProject, type PlannedProject } from "@/server/pipeline/mock-planner"
+import { parseUploadedDocuments } from "@/server/sources/source-intake"
 import type { ActionTask } from "@/types/actions"
 import type { ChunkRecord, DocumentRecord, QAPair, SourceRecord } from "@/types/artifacts"
 import type { BuildJob } from "@/types/jobs"
@@ -23,6 +24,7 @@ import type {
 } from "@/types/imports"
 import type { BuildStep, Project, ProjectStatus } from "@/types/project"
 import type { RewardSpec } from "@/types/rewards"
+import type { UploadParseReport } from "@/types/source-intake"
 
 const stepDefinitions: Array<{
   id: string
@@ -100,6 +102,7 @@ type GeneratedBundle = {
   permissions: PermissionRecord[]
   qualityTags: QualityTagRecord[]
   adapterTrace: AdapterTraceRecord[]
+  uploadParseReport?: UploadParseReport
   castformFiles: Array<{ path: string; content: string }>
 }
 
@@ -202,6 +205,8 @@ export async function runBuildJob(projectId: string) {
       "imports/permissions.json",
       "imports/quality_tags.json",
       "imports/adapter_trace.json",
+      ...(generated.uploadParseReport ? ["imports/upload_parse_report.json"] : []),
+      ...(project.sourceConfig ? ["uploads/upload_manifest.json"] : []),
       "domain_graph.json",
       "source_manifest.json",
       "sources.jsonl",
@@ -272,6 +277,9 @@ async function writeGeneratedArtifacts(
   await writeArtifactJson(projectId, "imports/permissions.json", generated.permissions)
   await writeArtifactJson(projectId, "imports/quality_tags.json", generated.qualityTags)
   await writeArtifactJson(projectId, "imports/adapter_trace.json", generated.adapterTrace)
+  if (generated.uploadParseReport) {
+    await writeArtifactJson(projectId, "imports/upload_parse_report.json", generated.uploadParseReport)
+  }
   await writeArtifactJson(projectId, "domain_graph.json", generated.domainGraph)
   await writeArtifactJson(projectId, "source_manifest.json", generated.sources)
   await writeArtifactJson(projectId, "rewards/reward_spec.json", generated.rewardSpec)
@@ -317,14 +325,17 @@ async function writeGeneratedArtifacts(
 }
 
 async function generateBundle(projectId: string, plan: PlannedProject): Promise<GeneratedBundle> {
+  const uploaded = await parseUploadedDocuments(projectId)
   const imported = await runDomainImport({
     projectId,
     prompt: plan.modelGoal.userIntent,
     domainKind: plan.kind,
     sourceKinds: plan.sourcePlan.requiredSourceKinds,
     mockMode: process.env.MOCK_MODE !== "false",
+    sourceStrategy: uploaded.manifest?.files.length ? "uploaded_file" : undefined,
+    uploadedFilePaths: uploaded.manifest?.files.map((file) => file.relativePath),
     limits: {
-      maxSources: Number(process.env.MAX_SOURCES ?? 12),
+      maxSources: uploaded.manifest?.sourceConfig.maxSources ?? Number(process.env.MAX_SOURCES ?? 12),
       maxChunks: Number(process.env.MAX_CHUNKS ?? 300),
       maxQaPairs: Number(process.env.MAX_QA_PAIRS ?? 60),
     },
@@ -372,6 +383,7 @@ async function generateBundle(projectId: string, plan: PlannedProject): Promise<
     permissions: imported.permissions,
     qualityTags: imported.qualityTags,
     adapterTrace: imported.adapterTrace,
+    uploadParseReport: imported.uploadParseReport ?? uploaded.report ?? undefined,
     castformFiles,
   }
 }

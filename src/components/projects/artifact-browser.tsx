@@ -35,6 +35,7 @@ type ArtifactBrowserProps = {
 const groupLabels: Record<ArtifactGroup, string> = {
   manifest: "Manifest",
   imports: "Imports",
+  uploads: "Uploads",
   sources: "Sources",
   corpus: "Corpus",
   datasets: "Datasets",
@@ -47,6 +48,7 @@ const groupLabels: Record<ArtifactGroup, string> = {
 const groupOrder: ArtifactGroup[] = [
   "manifest",
   "imports",
+  "uploads",
   "sources",
   "corpus",
   "datasets",

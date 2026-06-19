@@ -1,4 +1,5 @@
 import type { DomainSpec } from "@/types/domain"
+import type { SourceConfig } from "@/types/source-intake"
 
 export type ProjectStatus =
   | "draft"
@@ -46,6 +47,7 @@ export type Project = {
   createdAt: string
   updatedAt: string
   domainSpec?: DomainSpec
+  sourceConfig?: SourceConfig
   metrics: {
     sources: number
     documents: number

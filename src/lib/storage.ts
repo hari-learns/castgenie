@@ -16,6 +16,7 @@ import type { ModelGoal } from "@/types/model-goal"
 import type { SourcePlan, TrainingPlan } from "@/types/plans"
 import type { Project } from "@/types/project"
 import type { RewardSpec } from "@/types/rewards"
+import type { SourceConfig, UploadManifest, UploadParseReport } from "@/types/source-intake"
 import type { ActionTrace, ChatTrace, FeedbackTrace } from "@/types/traces"
 
 export type ArtifactPreview = {
@@ -52,12 +53,17 @@ export type ProjectArtifacts = {
   permissionsPreview: string
   qualityTagsPreview: string
   adapterTracePreview: string
+  uploadManifest?: UploadManifest
+  uploadParseReport?: UploadParseReport
+  uploadManifestPreview: string
+  uploadParseReportPreview: string
 }
 
 type CreateProjectInput = {
   id: string
   name: string
   prompt: string
+  sourceConfig?: SourceConfig
 }
 
 export async function readJson<T>(filePath: string): Promise<T> {
@@ -106,6 +112,7 @@ export async function createProject(input: CreateProjectInput) {
     status: "draft",
     createdAt: now,
     updatedAt: now,
+    sourceConfig: input.sourceConfig,
     metrics: {
       sources: 0,
       documents: 0,
@@ -324,10 +331,14 @@ export async function readProjectArtifacts(
     permissionsJson,
     qualityTagsJson,
     adapterTraceJson,
+    uploadManifestJson,
+    uploadParseReportJson,
     importSummaryPreview,
     permissionsPreview,
     qualityTagsPreview,
     adapterTracePreview,
+    uploadManifestPreview,
+    uploadParseReportPreview,
   ] = await Promise.all([
     readTextIfExists(projectArtifactPath(projectId, "source_manifest.json")),
     readTextIfExists(projectArtifactPath(projectId, "chunks.jsonl")),
@@ -355,10 +366,14 @@ export async function readProjectArtifacts(
     readTextIfExists(projectArtifactPath(projectId, "imports", "permissions.json")),
     readTextIfExists(projectArtifactPath(projectId, "imports", "quality_tags.json")),
     readTextIfExists(projectArtifactPath(projectId, "imports", "adapter_trace.json")),
+    readTextIfExists(projectArtifactPath(projectId, "uploads", "upload_manifest.json")),
+    readTextIfExists(projectArtifactPath(projectId, "imports", "upload_parse_report.json")),
     readArtifactPreview(projectId, "imports/import_summary.json"),
     readArtifactPreview(projectId, "imports/permissions.json"),
     readArtifactPreview(projectId, "imports/quality_tags.json"),
     readArtifactPreview(projectId, "imports/adapter_trace.json"),
+    readArtifactPreview(projectId, "uploads/upload_manifest.json"),
+    readArtifactPreview(projectId, "imports/upload_parse_report.json"),
   ])
   const modelGoal = modelGoalJson
     ? (JSON.parse(modelGoalJson) as ModelGoal)
@@ -374,6 +389,12 @@ export async function readProjectArtifacts(
     : undefined
   const importSummary = importSummaryJson
     ? (JSON.parse(importSummaryJson) as ImportSummary)
+    : undefined
+  const uploadManifest = uploadManifestJson
+    ? (JSON.parse(uploadManifestJson) as UploadManifest)
+    : undefined
+  const uploadParseReport = uploadParseReportJson
+    ? (JSON.parse(uploadParseReportJson) as UploadParseReport)
     : undefined
 
   return {
@@ -402,6 +423,8 @@ export async function readProjectArtifacts(
     adapterTrace: adapterTraceJson
       ? (JSON.parse(adapterTraceJson) as AdapterTraceRecord[])
       : [],
+    uploadManifest,
+    uploadParseReport,
     modelGoalPreview: modelGoalPreview.content,
     sourcePlanPreview: sourcePlanPreview.content,
     trainingPlanPreview: trainingPlanPreview.content,
@@ -411,5 +434,7 @@ export async function readProjectArtifacts(
     permissionsPreview: permissionsPreview.content,
     qualityTagsPreview: qualityTagsPreview.content,
     adapterTracePreview: adapterTracePreview.content,
+    uploadManifestPreview: uploadManifestPreview.content,
+    uploadParseReportPreview: uploadParseReportPreview.content,
   }
 }

@@ -1,36 +1,98 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CastGenie
 
-## Getting Started
+CastGenie is a local-first prototype for turning an English model intent into a source-grounded assistant workspace. It creates project artifacts, import summaries, local RAG chat/actions, traces, and Castform-ready export scaffolds.
 
-First, run the development server:
+## Current Wave Status
+
+- Wave 0-3: Next.js foundation, local JSON project storage, backend build pipeline, English-to-model planner.
+- Wave 4: import adapter layer with CA fixture, security placeholder, and synthetic fallback.
+- Wave 5: local RAG assistant, generated actions, traces, feedback, optional Gemini provider.
+- Wave 6: artifact browser and Castform-ready ZIP export.
+- Wave 7: real local source intake for TXT, MD, JSON, JSONL, and CSV uploads.
+
+This is not production infrastructure yet. Local JSON storage is a short-term path to prove behavior before replacing it with Postgres, object storage, auth, and real background workers.
+
+## Run Locally
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Before committing a wave, run:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+pnpm lint
+pnpm build
+```
 
-## Learn More
+## Environment
 
-To learn more about Next.js, take a look at the following resources:
+Copy `.env.example` to `.env.local` for local secrets.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+MOCK_MODE=true
+LLM_PROVIDER=mock
+GEMINI_API_KEY=
+GEMINI_BASE_URL=https://generativelanguage.googleapis.com
+GEMINI_MODEL=gemini-3.5-flash
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+`MOCK_MODE=true` must work without provider keys. Set `GEMINI_API_KEY` only in `.env.local`; never commit it.
 
-## Deploy on Vercel
+## Local Storage
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Generated project data is written under:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```text
+storage/projects/<projectId>/
+```
+
+Generated project runs are ignored by Git. Important generated paths include:
+
+- `manifest.json`
+- `source_manifest.json`
+- `chunks.jsonl`
+- `datasets/*.jsonl`
+- `imports/*.json`
+- `uploads/upload_manifest.json`
+- `logs/*.jsonl`
+- `castform_project/`
+
+## Source Uploads
+
+Wave 7 accepts local files during project creation or from the project Sources tab.
+
+Parsed as corpus:
+
+- `.txt`
+- `.md`
+- `.json`
+- `.jsonl`
+- `.csv`
+
+Stored but skipped:
+
+- `.pdf`
+
+Default upload limits:
+
+- 8 files per project
+- 2 MB per file
+- 8 MB total uploaded source size
+
+PDF extraction is intentionally deferred. Low-quality extraction would contaminate chunks, train/eval rows, and reward artifacts.
+
+## Castform Export
+
+Each successful build prepares `castform_project/` with:
+
+- `README.md`
+- `config.yaml`
+- copied corpus data
+- reward spec
+- inert Python scaffolds
+
+The scaffolds do not import Castform at module load and do not make network calls. Real Castform training/hosting is a later wave and requires source-permission review first.

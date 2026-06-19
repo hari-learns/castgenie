@@ -1,6 +1,7 @@
 export type ArtifactGroup =
   | "manifest"
   | "imports"
+  | "uploads"
   | "sources"
   | "corpus"
   | "datasets"

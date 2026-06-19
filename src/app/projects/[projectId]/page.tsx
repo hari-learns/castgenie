@@ -11,6 +11,7 @@ import { PageShell } from "@/components/app/page-shell"
 import { StatusBadge } from "@/components/app/status-badge"
 import { ArtifactBrowser } from "@/components/projects/artifact-browser"
 import { ProjectAssistant } from "@/components/projects/project-assistant"
+import { ProjectSourceManager } from "@/components/projects/project-source-manager"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -374,6 +375,12 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
               {project.domainSpec?.sourcePolicy.permissionNote}
             </AlertDescription>
           </Alert>
+          <ProjectSourceManager
+            projectId={project.id}
+            sourceConfig={project.sourceConfig ?? artifacts.uploadManifest?.sourceConfig}
+            uploadManifest={artifacts.uploadManifest}
+            uploadParseReport={artifacts.uploadParseReport}
+          />
           <section className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
