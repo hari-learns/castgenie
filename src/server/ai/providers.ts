@@ -147,45 +147,61 @@ function mockAction(input: ActionProviderInput): AssistantResponse {
   }
 }
 
-async function deepSeekRequest(messages: Array<{ role: "system" | "user" | "assistant"; content: string }>) {
-  const apiKey = process.env.DEEPSEEK_API_KEY
+async function geminiRequest(prompt: string) {
+  const apiKey = process.env.GEMINI_API_KEY
 
   if (!apiKey) {
-    throw new Error("DEEPSEEK_API_KEY is not configured")
+    throw new Error("GEMINI_API_KEY is not configured")
   }
 
-  const baseUrl = process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com"
-  const model = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash"
+  const baseUrl =
+    process.env.GEMINI_BASE_URL || "https://generativelanguage.googleapis.com"
+  const model = process.env.GEMINI_MODEL || "gemini-3.5-flash"
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 20000)
 
   try {
-    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
+    const url = new URL(
+      `/v1beta/models/${encodeURIComponent(model)}:generateContent`,
+      baseUrl.replace(/\/$/, "")
+    )
+    url.searchParams.set("key", apiKey)
+    const response = await fetch(url, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model,
-        messages,
-        max_tokens: 1600,
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: prompt }],
+          },
+        ],
+        generationConfig: {
+          maxOutputTokens: 1600,
+        },
       }),
       signal: controller.signal,
     })
 
     if (!response.ok) {
       const text = await response.text().catch(() => "")
-      throw new Error(`DeepSeek request failed with ${response.status}: ${text.slice(0, 300)}`)
+      throw new Error(`Gemini request failed with ${response.status}: ${text.slice(0, 300)}`)
     }
 
     const payload = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>
+      candidates?: Array<{
+        content?: {
+          parts?: Array<{ text?: string }>
+        }
+      }>
     }
-    const content = payload.choices?.[0]?.message?.content?.trim()
+    const content = payload.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text ?? "")
+      .join("")
+      .trim()
 
     if (!content) {
-      throw new Error("DeepSeek response did not include content")
+      throw new Error("Gemini response did not include content")
     }
 
     return content
@@ -194,41 +210,36 @@ async function deepSeekRequest(messages: Array<{ role: "system" | "user" | "assi
   }
 }
 
-function shouldUseDeepSeek() {
+function shouldUseGemini() {
   if (process.env.LLM_PROVIDER === "mock") {
     return false
   }
 
-  return Boolean(process.env.DEEPSEEK_API_KEY)
+  return Boolean(process.env.GEMINI_API_KEY)
 }
 
 export async function generateChatAnswer(input: ChatProviderInput): Promise<AssistantResponse> {
-  if (!shouldUseDeepSeek()) {
+  if (!shouldUseGemini()) {
     return mockChat(input)
   }
 
   try {
-    const content = await deepSeekRequest([
-      {
-        role: "system",
-        content:
-          "You are CastGenie. Answer only from provided project context. If context is weak, say so. Include a concise Sources section using chunk ids.",
-      },
-      {
-        role: "user",
-        content: [
-          `Project: ${input.projectName}`,
-          `Domain: ${input.domain}`,
-          `User question: ${input.message}`,
-          "",
-          "Retrieved context:",
-          contextBlock(input.retrieval),
-        ].join("\n"),
-      },
-    ])
+    const content = await geminiRequest(
+      [
+        "You are CastGenie. Answer only from provided project context.",
+        "If context is weak, say so. Include a concise Sources section using chunk ids.",
+        "",
+        `Project: ${input.projectName}`,
+        `Domain: ${input.domain}`,
+        `User question: ${input.message}`,
+        "",
+        "Retrieved context:",
+        contextBlock(input.retrieval),
+      ].join("\n")
+    )
 
     return {
-      provider: "deepseek",
+      provider: "gemini",
       content,
       citations: citationsFrom(input.retrieval),
     }
@@ -238,34 +249,29 @@ export async function generateChatAnswer(input: ChatProviderInput): Promise<Assi
 }
 
 export async function generateActionOutput(input: ActionProviderInput): Promise<AssistantResponse> {
-  if (!shouldUseDeepSeek()) {
+  if (!shouldUseGemini()) {
     return mockAction(input)
   }
 
   try {
-    const content = await deepSeekRequest([
-      {
-        role: "system",
-        content:
-          "You are CastGenie. Produce the requested action output using only retrieved project context. Preserve the requested format and cite chunk ids.",
-      },
-      {
-        role: "user",
-        content: [
-          `Project: ${input.projectName}`,
-          `Domain: ${input.domain}`,
-          `Action: ${input.action.label}`,
-          `Output format: ${input.action.outputFormat}`,
-          `Input: ${JSON.stringify(input.input)}`,
-          "",
-          "Retrieved context:",
-          contextBlock(input.retrieval),
-        ].join("\n"),
-      },
-    ])
+    const content = await geminiRequest(
+      [
+        "You are CastGenie. Produce the requested action output using only retrieved project context.",
+        "Preserve the requested format and cite chunk ids.",
+        "",
+        `Project: ${input.projectName}`,
+        `Domain: ${input.domain}`,
+        `Action: ${input.action.label}`,
+        `Output format: ${input.action.outputFormat}`,
+        `Input: ${JSON.stringify(input.input)}`,
+        "",
+        "Retrieved context:",
+        contextBlock(input.retrieval),
+      ].join("\n")
+    )
 
     return {
-      provider: "deepseek",
+      provider: "gemini",
       content,
       citations: citationsFrom(input.retrieval),
     }
@@ -275,5 +281,5 @@ export async function generateActionOutput(input: ActionProviderInput): Promise<
 }
 
 export function providerLabel(provider: ProviderName) {
-  return provider === "deepseek" ? "DeepSeek" : "Mock local"
+  return provider === "gemini" ? "Gemini" : "Mock local"
 }

@@ -1,7 +1,7 @@
 import type { ActionTemplate } from "@/types/actions"
 import type { ChatCitation, ChatMessage } from "@/types/artifacts"
 
-export type ProviderName = "mock" | "deepseek"
+export type ProviderName = "mock" | "gemini"
 
 export type RetrievedChunk = {
   id: string

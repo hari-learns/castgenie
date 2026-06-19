@@ -55,7 +55,7 @@ type ProjectAssistantProps = {
 }
 
 function providerLabel(provider?: ProviderName) {
-  return provider === "deepseek" ? "DeepSeek" : "Mock local"
+  return provider === "gemini" ? "Gemini" : "Mock local"
 }
 
 function CitationList({ citations }: { citations?: ChatCitation[] }) {
