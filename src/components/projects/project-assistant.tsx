@@ -1,7 +1,16 @@
 "use client"
 
 import { useMemo, useState, type FormEvent } from "react"
-import { PlayIcon, SendIcon, ThumbsDownIcon, ThumbsUpIcon } from "lucide-react"
+import {
+  CheckIcon,
+  CopyIcon,
+  DownloadIcon,
+  Loader2Icon,
+  PlayIcon,
+  SendIcon,
+  ThumbsDownIcon,
+  ThumbsUpIcon,
+} from "lucide-react"
 
 import type { ActionTemplate } from "@/types/actions"
 import type { ChatCitation, ChatMessage } from "@/types/artifacts"
@@ -18,6 +27,7 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 
 type AssistantChatResponse = {
@@ -87,6 +97,7 @@ export function ProjectAssistant({
   const [runningActionId, setRunningActionId] = useState<string | null>(null)
   const [actionResults, setActionResults] = useState<ActionResult[]>([])
   const [actionError, setActionError] = useState<string | null>(null)
+  const [copiedKey, setCopiedKey] = useState<string | null>(null)
 
   const chatHistory = useMemo(
     () =>
@@ -207,6 +218,49 @@ export function ProjectAssistant({
     )
   }
 
+  async function copyText(key: string, value: string) {
+    await navigator.clipboard.writeText(value)
+    setCopiedKey(key)
+    window.setTimeout(() => setCopiedKey(null), 1500)
+  }
+
+  function actionMarkdown(result: ActionResult) {
+    const citations = result.citations.length
+      ? result.citations
+          .map(
+            (citation) =>
+              `- ${citation.title} (${citation.chunkId})${citation.url ? `: ${citation.url}` : ""}`
+          )
+          .join("\n")
+      : "- No citations returned."
+
+    return `# ${result.title}
+
+Provider: ${providerLabel(result.provider)}
+Trace: ${result.traceId}
+
+## Output
+
+${result.output}
+
+## Citations
+
+${citations}
+`
+  }
+
+  function downloadActionResult(result: ActionResult) {
+    const blob = new Blob([actionMarkdown(result)], { type: "text/markdown" })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement("a")
+    anchor.href = url
+    anchor.download = `${result.actionId}-${result.traceId}.md`
+    document.body.append(anchor)
+    anchor.click()
+    anchor.remove()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="grid gap-4 xl:grid-cols-[1fr_24rem]">
       <Card>
@@ -229,6 +283,19 @@ export function ProjectAssistant({
               <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
                 Ask a domain question. The answer must cite retrieved project
                 chunks, even when the match is weak.
+              </div>
+            ) : null}
+            {isSending ? (
+              <div className="max-w-[95%] rounded-lg border border-border bg-background px-3 py-3">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2Icon className="animate-spin" aria-hidden="true" />
+                  Retrieving chunks and generating an answer
+                </div>
+                <div className="mt-3 flex flex-col gap-2">
+                  <Skeleton className="h-3 w-3/4" />
+                  <Skeleton className="h-3 w-5/6" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
               </div>
             ) : null}
 
@@ -283,7 +350,11 @@ export function ProjectAssistant({
             />
             <div className="flex justify-end">
               <Button type="submit" disabled={isSending}>
-                <SendIcon aria-hidden="true" />
+                {isSending ? (
+                  <Loader2Icon className="animate-spin" aria-hidden="true" />
+                ) : (
+                  <SendIcon aria-hidden="true" />
+                )}
                 {isSending ? "Generating" : "Send"}
               </Button>
             </div>
@@ -315,36 +386,126 @@ export function ProjectAssistant({
                 <AlertDescription>{actionError}</AlertDescription>
               </Alert>
             ) : null}
-            {actions.map((action) => (
-              <div
-                key={action.id}
-                className="rounded-lg border border-border bg-muted/20 p-3"
-              >
-                <Badge variant="secondary">{action.outputFormat}</Badge>
-                <p className="mt-2 text-sm font-medium">{action.label}</p>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  {action.description}
-                </p>
-                <Button
-                  type="button"
-                  className="mt-3 w-full"
-                  variant="outline"
-                  disabled={Boolean(runningActionId)}
-                  onClick={() => runAction(action)}
+            {actions.length ? (
+              actions.map((action) => (
+                <div
+                  key={action.id}
+                  className="rounded-lg border border-border bg-muted/20 p-3"
                 >
-                  <PlayIcon aria-hidden="true" />
-                  {runningActionId === action.id ? "Running" : "Run"}
-                </Button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary">{action.outputFormat}</Badge>
+                    <Badge variant="outline">{action.capability}</Badge>
+                  </div>
+                  <p className="mt-2 text-sm font-medium">{action.label}</p>
+                  <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    {action.description}
+                  </p>
+                  <Button
+                    type="button"
+                    className="mt-3 w-full"
+                    variant="outline"
+                    disabled={Boolean(runningActionId)}
+                    onClick={() => runAction(action)}
+                  >
+                    {runningActionId === action.id ? (
+                      <Loader2Icon className="animate-spin" aria-hidden="true" />
+                    ) : (
+                      <PlayIcon aria-hidden="true" />
+                    )}
+                    {runningActionId === action.id ? "Running" : "Run action"}
+                  </Button>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                No generated actions are available yet. Rebuild the project after
+                the planner runs.
               </div>
-            ))}
+            )}
           </CardContent>
         </Card>
+
+        {runningActionId ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Action running</CardTitle>
+              <CardDescription>
+                Retrieving source chunks and formatting the generated output.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-2">
+              <Skeleton className="h-3 w-3/4" />
+              <Skeleton className="h-3 w-full" />
+              <Skeleton className="h-3 w-2/3" />
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {actionResults.length === 0 && !runningActionId ? (
+          <Card>
+            <CardContent className="p-4 text-sm text-muted-foreground">
+              Run an action to generate a reusable output with citations,
+              feedback, copy, and markdown download controls.
+            </CardContent>
+          </Card>
+        ) : null}
 
         {actionResults.map((result) => (
           <Card key={result.traceId}>
             <CardHeader>
-              <CardTitle className="text-base">{result.title}</CardTitle>
-              <CardDescription>{providerLabel(result.provider)}</CardDescription>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <CardTitle className="text-base">{result.title}</CardTitle>
+                  <CardDescription>{providerLabel(result.provider)}</CardDescription>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    type="button"
+                    onClick={() => copyText(`${result.traceId}-output`, result.output)}
+                  >
+                    {copiedKey === `${result.traceId}-output` ? (
+                      <CheckIcon aria-hidden="true" />
+                    ) : (
+                      <CopyIcon aria-hidden="true" />
+                    )}
+                    Output
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    type="button"
+                    onClick={() =>
+                      copyText(
+                        `${result.traceId}-citations`,
+                        result.citations
+                          .map(
+                            (citation) =>
+                              `${citation.title} (${citation.chunkId})${citation.url ? ` ${citation.url}` : ""}`
+                          )
+                          .join("\n")
+                      )
+                    }
+                  >
+                    {copiedKey === `${result.traceId}-citations` ? (
+                      <CheckIcon aria-hidden="true" />
+                    ) : (
+                      <CopyIcon aria-hidden="true" />
+                    )}
+                    Citations
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    type="button"
+                    onClick={() => downloadActionResult(result)}
+                  >
+                    <DownloadIcon aria-hidden="true" />
+                    .md
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="flex flex-col gap-3 text-sm">
               <p className="whitespace-pre-wrap leading-6">{result.output}</p>
