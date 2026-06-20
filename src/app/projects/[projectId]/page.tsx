@@ -12,6 +12,7 @@ import type { SidebarSectionLink } from "@/components/app/app-sidebar"
 import { StatusBadge } from "@/components/app/status-badge"
 import { ArtifactBrowser } from "@/components/projects/artifact-browser"
 import { CastformRunsPanel } from "@/components/projects/castform-runs-panel"
+import { ModelLifecycleCard } from "@/components/projects/model-lifecycle-card"
 import { ProjectAssistant } from "@/components/projects/project-assistant"
 import { ProjectSourceManager } from "@/components/projects/project-source-manager"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -39,6 +40,7 @@ import {
   readBuildJob,
   readProjectArtifacts,
 } from "@/lib/storage"
+import { deriveModelLifecycle } from "@/lib/model-lifecycle"
 import { getArtifactBrowserData } from "@/server/artifacts/project-artifacts"
 import { getCastformState } from "@/server/castform/runs"
 import { readLatestBuildProjectJob } from "@/server/jobs/queue"
@@ -144,15 +146,12 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
   const hostedModel = castformState?.modelVersions.find(
     (version) => version.status === "hosted" && version.modelName
   )
-  const modelReady = Boolean(hostedModel)
-  const workspaceStatus = modelReady
-    ? "Model ready"
-    : castformState?.latestRun?.mode === "real" &&
-        ["queued", "running"].includes(castformState.latestRun.status)
-      ? "Training on Castform"
-      : castformState?.readiness.readyForReal
-        ? "Ready to train"
-        : "Training blocked"
+  const lifecycle = deriveModelLifecycle({
+    projectStatus: project.status,
+    buildJob,
+    castformState,
+  })
+  const modelReady = lifecycle.chatEnabled
   const artifactBrowserData = await getArtifactBrowserData(project.id)
   const sidebarSectionLinks: SidebarSectionLink[] = projectSections.map((section) => ({
     title: section.label,
@@ -222,53 +221,65 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
                 projectId={project.id}
                 actions={artifacts.modelGoal?.generatedActions ?? []}
                 disabled={!modelReady}
-                disabledReason={
-                  castformState?.latestRun?.mode === "real" &&
-                  ["queued", "running"].includes(castformState.latestRun.status)
-                    ? "Castform training has started. Chat unlocks when a hosted model version is ready."
-                    : castformState?.readiness.blockingIssues.length
-                      ? `Training is blocked: ${castformState.readiness.blockingIssues[0]}`
-                      : "No hosted Castform model is ready yet. The preview assistant is not the trained model."
+                disabledReason={lifecycle.detail}
+                disabledStateSlot={
+                  <div className="flex min-h-72 flex-col justify-center gap-4 rounded-lg border border-dashed border-border bg-muted/20 p-4">
+                    <ModelLifecycleCard lifecycle={lifecycle} compact />
+                    <div className="rounded-lg border border-border bg-background p-4 text-sm leading-6 text-muted-foreground">
+                      The main chat is reserved for the hosted Castform-trained
+                      model. Preview responses are available only as preview/debug
+                      behavior and are not the trained model.
+                    </div>
+                  </div>
                 }
                 contextSlot={
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>What you asked CastGenie to build</CardTitle>
-                      <CardDescription>
-                        This is the model workspace CastGenie prepared from your
-                        request.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex flex-col gap-4">
-                      <textarea
-                        className="min-h-72 resize-none rounded-lg border border-input bg-background px-4 py-3 text-sm leading-6 shadow-xs outline-none"
-                        defaultValue={project.prompt}
-                        aria-label="Original model request"
-                      />
-                      <div className="grid gap-3 sm:grid-cols-3">
-                        <div className="rounded-lg border border-border p-3">
-                          <p className="text-xs text-muted-foreground">Sources</p>
-                          <p className="mt-1 text-2xl font-semibold">
-                            {project.metrics.sources}
-                          </p>
+                  <div className="flex flex-col gap-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>What you asked CastGenie to build</CardTitle>
+                        <CardDescription>
+                          This is the model request CastGenie is turning into a
+                          Castform-trained assistant.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="flex flex-col gap-4">
+                        <textarea
+                          className="min-h-72 resize-none rounded-lg border border-input bg-background px-4 py-3 text-sm leading-6 shadow-xs outline-none"
+                          defaultValue={project.prompt}
+                          aria-label="Original model request"
+                        />
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <div className="rounded-lg border border-border p-3">
+                            <p className="text-xs text-muted-foreground">Sources</p>
+                            <p className="mt-1 text-2xl font-semibold">
+                              {project.metrics.sources}
+                            </p>
+                          </div>
+                          <div className="rounded-lg border border-border p-3">
+                            <p className="text-xs text-muted-foreground">Documents</p>
+                            <p className="mt-1 text-2xl font-semibold">
+                              {project.metrics.documents}
+                            </p>
+                          </div>
+                          <div className="rounded-lg border border-border p-3">
+                            <p className="text-xs text-muted-foreground">Workflows</p>
+                            <p className="mt-1 text-2xl font-semibold">
+                              {artifacts.modelGoal?.generatedActions.length ?? 0}
+                            </p>
+                          </div>
                         </div>
-                        <div className="rounded-lg border border-border p-3">
-                          <p className="text-xs text-muted-foreground">Documents</p>
-                          <p className="mt-1 text-2xl font-semibold">
-                            {project.metrics.documents}
-                          </p>
-                        </div>
-                        <div className="rounded-lg border border-border p-3">
-                          <p className="text-xs text-muted-foreground">Status</p>
-                          <p className="mt-1 text-2xl font-semibold">
-                            {workspaceStatus}
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                      </CardContent>
+                    </Card>
+                    <ModelLifecycleCard lifecycle={lifecycle} />
+                  </div>
                 }
                 showWorkflows={false}
+                chatTitle="Chat with trained model"
+                chatDescription={
+                  modelReady
+                    ? `Using ${hostedModel?.modelName ?? "the hosted Castform model"}.`
+                    : "This unlocks only after Castform training produces a hosted model."
+                }
                 suggestedPrompt={
                   project.domainSpec?.domain === "OWASP code security"
                     ? "Explain how to review for broken access control with citations."
@@ -287,6 +298,8 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
                 actions={artifacts.modelGoal?.generatedActions ?? []}
                 disabled={!modelReady}
                 disabledReason="Workflows use the hosted Castform model and unlock when training produces a model version."
+                workflowsTitle="Hosted model workflows"
+                workflowsDescription="These outputs run against the trained Castform model after a hosted version exists."
                 showChat={false}
                 suggestedPrompt=""
               />
@@ -745,6 +758,7 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
             <CastformRunsPanel
               projectId={project.id}
               initialState={castformState}
+              lifecycle={lifecycle}
             />
           ) : null}
             </section>

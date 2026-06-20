@@ -16,7 +16,9 @@ The product thesis is simple: a user describes the expert assistant or model wor
 - Wave 10-14: local demo hardening, simple workspace UX, and first corrective Castform hosted-model routing.
 - Wave 15: Supabase-backed metadata, durable build jobs, and local worker runtime.
 - Wave 16: real Castform RAG project generation with `run.py`, native train/eval datasets, corpus manifest, and readiness metadata.
-- Wave 17-19: planned corrective path for Castform launch monitoring, hosted model chat, and end-to-end demo hardening. See `docs/wave-15-19-plan.md`.
+- Wave 17: real Castform validation, launch jobs, monitoring metadata, and hosted model version records.
+- Wave 18: product UX for real training status and hosted-model chat truthfulness.
+- Wave 19: planned end-to-end real demo hardening. See `docs/wave-15-19-plan.md`.
 
 Current behavior still includes local preview infrastructure. The intended product path is real-source ingestion, Castform RAG training, and hosted-model chat.
 
@@ -104,10 +106,10 @@ Use this 90-second local demo flow:
 2. Open `/projects/new`, enter a domain request, and create a project.
 3. Show the project Overview: model goal, source/import summary, generated actions, and job state.
 4. Open Sources and explain uploaded files, mock web discovery, permission status, and warnings.
-5. Open Assistant, ask a source-grounded question, then run one generated action.
-6. Show citations, feedback, copy controls, and markdown download for action results.
-7. Open Files & Export and show the generated Castform project files.
-8. Open Training and explain whether the project is blocked, training on Castform, or ready for hosted-model chat.
+5. Open Workspace and show that main chat is locked until a hosted Castform model exists.
+6. Open Training and explain whether the project is blocked, training on Castform, or ready for hosted-model chat.
+7. Open Workflows and show that production workflows also require the hosted model.
+8. Open Files & Export and show the generated Castform project files.
 
 ## Final Local Demo Checklist
 
@@ -196,13 +198,13 @@ Each successful build prepares `castform_project/` with a real RAG project shape
 - reward spec
 - `src/env.py`, `src/dataset.py`, `src/tools.py`, `src/rewards.py`, `src/train.py`
 
-Wave 16 does not launch paid training. The workspace is prepared for Wave 17 validation and launch plumbing after source/data readiness checks pass.
+Wave 16 generates the Castform RAG workspace. Wave 17 validates and launches real Castform training through the local worker when readiness, credentials, and runtime checks pass.
 
 ## Castform Runs
 
-CastGenie now treats local Gemini/mock responses as preview only. The main model chat unlocks after a hosted Castform model version exists.
+CastGenie treats local Gemini/mock responses as preview only. The main model chat and production workflows unlock only after a hosted Castform model version exists.
 
-The Python runner lives at `scripts/castform_runner.py`. It imports `benchmax` only during a real launch/status check and never logs API keys. Real launch requires `CASTFORM_REAL_RUNS_ENABLED=true`, `CASTFORM_API_KEY`, Python 3.12 with `benchmax`, and permission-clean real sources. `CASTFORM_BASE_URL` is only an optional platform override. In Wave 16, real launch is deliberately deferred even when auto-launch flags are set; Wave 17 removes that gate after validation and monitoring are implemented.
+The Python runner lives at `scripts/castform_runner.py`. It imports `benchmax` only during preflight, validation, launch, or status checks and never logs API keys. Real launch requires `CASTFORM_REAL_RUNS_ENABLED=true`, `CASTFORM_API_KEY`, the configured `CASTFORM_PYTHON_BIN` with `benchmax`, and permission-clean real sources. `CASTFORM_BASE_URL` is only an optional platform override.
 
 ## Limitations
 

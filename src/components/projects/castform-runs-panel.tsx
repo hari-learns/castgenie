@@ -8,12 +8,14 @@ import {
   RefreshCwIcon,
 } from "lucide-react"
 
+import type { ModelLifecycle } from "@/lib/model-lifecycle"
 import type {
   CastformRun,
   CastformRunsResponse,
   ModelVersion,
   TrainingReadiness,
 } from "@/types/castform"
+import { ModelLifecycleCard } from "@/components/projects/model-lifecycle-card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -24,7 +26,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
 import {
   Table,
   TableBody,
@@ -37,6 +38,7 @@ import {
 type CastformRunsPanelProps = {
   projectId: string
   initialState: CastformRunsResponse
+  lifecycle: ModelLifecycle
 }
 
 function statusVariant(status: CastformRun["status"]) {
@@ -176,6 +178,7 @@ function ModelVersions({ versions }: { versions: ModelVersion[] }) {
 export function CastformRunsPanel({
   projectId,
   initialState,
+  lifecycle,
 }: CastformRunsPanelProps) {
   const [state, setState] = useState(initialState)
   const [pending, setPending] = useState<string | null>(null)
@@ -231,11 +234,45 @@ export function CastformRunsPanel({
 
   return (
     <div className="flex flex-col gap-4">
+      <section className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <ModelLifecycleCard lifecycle={lifecycle} />
+        <Card>
+          <CardHeader>
+            <CardTitle>Training overview</CardTitle>
+            <CardDescription>
+              CastGenie keeps local preview separate from real Castform training.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="text-sm text-muted-foreground">Latest run</p>
+              <p className="font-medium">{state.latestRun?.status ?? "None"}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Hosted models</p>
+              <p className="font-medium">
+                {state.modelVersions.filter((version) => version.status === "hosted").length}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Readiness</p>
+              <p className="font-medium">
+                {state.readiness.readyForReal ? "Ready for real launch" : "Blocked"}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Simulation</p>
+              <p className="font-medium">Mock runs are preview only</p>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
       <ReadinessPanel readiness={state.readiness} />
 
       <Card>
         <CardHeader>
-          <CardTitle>Castform runs</CardTitle>
+          <CardTitle>Runs</CardTitle>
           <CardDescription>
             Real runs use Castform credits. Mock runs are local simulations only.
           </CardDescription>
@@ -255,7 +292,7 @@ export function CastformRunsPanel({
               onClick={() => createRun("mock")}
             >
               <PlayIcon aria-hidden="true" />
-              Create mock training run
+              Create preview simulation
             </Button>
             <Button
               type="button"
@@ -267,43 +304,6 @@ export function CastformRunsPanel({
               Launch real Castform run
             </Button>
           </div>
-
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <div>
-              <p className="text-sm text-muted-foreground">Auto launch</p>
-              <p className="font-medium">
-                {state.config.autoLaunchEnabled ? "Enabled" : "Disabled"}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Real runs</p>
-              <p className="font-medium">
-                {state.config.realRunsEnabled ? "Enabled" : "Disabled"}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">API key</p>
-              <p className="font-medium">
-                {state.config.hasApiKey ? "Configured" : "Missing"}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Platform URL override</p>
-              <p className="font-medium">
-                {state.config.hasBaseUrl ? "Configured" : "Default"}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Model</p>
-              <p className="font-medium">{state.config.baseModel}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Python</p>
-              <p className="font-medium">{state.config.pythonBin}</p>
-            </div>
-          </div>
-
-          <Separator />
 
           {state.runs.length ? (
             <div className="flex flex-col gap-3">
@@ -330,8 +330,30 @@ export function CastformRunsPanel({
                       onClick={() => refreshRun(run)}
                     >
                       <RefreshCwIcon aria-hidden="true" />
-                      Refresh
+                      Refresh status
                     </Button>
+                  </div>
+                  <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                    {run.providerJobId ? (
+                      <p className="break-all text-muted-foreground">
+                        Provider job: {run.providerJobId}
+                      </p>
+                    ) : null}
+                    {run.castformRunId ? (
+                      <p className="break-all text-muted-foreground">
+                        Castform run: {run.castformRunId}
+                      </p>
+                    ) : null}
+                    {run.validationReportPath ? (
+                      <p className="break-all text-muted-foreground">
+                        Validation: {run.validationReportPath}
+                      </p>
+                    ) : null}
+                    {run.launchConfigPath ? (
+                      <p className="break-all text-muted-foreground">
+                        Launch config: {run.launchConfigPath}
+                      </p>
+                    ) : null}
                   </div>
                   {run.error ? (
                     <p className="mt-2 text-sm text-destructive">{run.error}</p>
@@ -353,6 +375,47 @@ export function CastformRunsPanel({
       </Card>
 
       <ModelVersions versions={state.modelVersions} />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Config</CardTitle>
+          <CardDescription>
+            Server-side settings used for real Castform launch and hosted chat.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div>
+            <p className="text-sm text-muted-foreground">Auto launch</p>
+            <p className="font-medium">
+              {state.config.autoLaunchEnabled ? "Enabled" : "Disabled"}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">Real runs</p>
+            <p className="font-medium">
+              {state.config.realRunsEnabled ? "Enabled" : "Disabled"}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">API key</p>
+            <p className="font-medium">
+              {state.config.hasApiKey ? "Configured" : "Missing"}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">Base model</p>
+            <p className="font-medium">{state.config.baseModel}</p>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">Inference endpoint</p>
+            <p className="break-all font-medium">{state.config.inferenceBaseUrl}</p>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">Python</p>
+            <p className="break-all font-medium">{state.config.pythonBin}</p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

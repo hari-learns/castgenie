@@ -64,9 +64,14 @@ type ProjectAssistantProps = {
   suggestedPrompt: string
   disabled?: boolean
   disabledReason?: string
+  disabledStateSlot?: ReactNode
   contextSlot?: ReactNode
   showChat?: boolean
   showWorkflows?: boolean
+  chatTitle?: string
+  chatDescription?: string
+  workflowsTitle?: string
+  workflowsDescription?: string
 }
 
 function providerLabel(provider?: ProviderName) {
@@ -96,9 +101,14 @@ export function ProjectAssistant({
   suggestedPrompt,
   disabled = false,
   disabledReason = "This model is not ready yet.",
+  disabledStateSlot,
   contextSlot,
   showChat = true,
   showWorkflows = true,
+  chatTitle = "Ask this model",
+  chatDescription = "Available after Castform training produces a hosted model.",
+  workflowsTitle = "Workflows",
+  workflowsDescription = "One-click outputs CastGenie prepared for this project.",
 }: ProjectAssistantProps) {
   const [messages, setMessages] = useState<LocalMessage[]>([])
   const [message, setMessage] = useState(suggestedPrompt)
@@ -293,13 +303,13 @@ ${citations}
       {showChat ? (
         <Card>
           <CardHeader>
-            <CardTitle>Ask this model</CardTitle>
-            <CardDescription>
-              Available after Castform training produces a hosted model.
-            </CardDescription>
+            <CardTitle>{chatTitle}</CardTitle>
+            <CardDescription>{chatDescription}</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            {disabled ? (
+            {disabled && disabledStateSlot ? (
+              disabledStateSlot
+            ) : disabled ? (
               <Alert>
                 <AlertTitle>Model not ready yet</AlertTitle>
                 <AlertDescription>{disabledReason}</AlertDescription>
@@ -313,10 +323,12 @@ ${citations}
               </Alert>
             ) : null}
 
+            {!disabled ? (
+              <>
             <div className="flex min-h-72 flex-col gap-3 rounded-lg border border-border bg-muted/20 p-3">
               {messages.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                  Ask the trained Castform model once training completes.
+                  Ask the trained Castform model.
                 </div>
               ) : null}
               {isSending ? (
@@ -398,6 +410,8 @@ ${citations}
                 </Button>
               </div>
             </form>
+              </>
+            ) : null}
           </CardContent>
         </Card>
       ) : null}
@@ -406,10 +420,8 @@ ${citations}
         <div className="flex flex-col gap-4">
         <Card>
           <CardHeader>
-            <CardTitle>Workflows</CardTitle>
-            <CardDescription>
-              One-click outputs CastGenie prepared for this project.
-            </CardDescription>
+            <CardTitle>{workflowsTitle}</CardTitle>
+            <CardDescription>{workflowsDescription}</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             <div className="flex flex-col gap-2">
