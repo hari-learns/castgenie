@@ -377,9 +377,11 @@ def load_chunks() -> list[dict[str, Any]]:
 
 
 class LocalJsonlSearch:
-    def __init__(self, top_k: int = 5):
+    def __init__(self, top_k: int = 5, chunks: list[dict[str, Any]] | None = None):
         self.top_k = top_k
-        self._chunks = load_chunks()
+        # Castform remote workers receive chunks through constructor_args.
+        # Local file loading is only a development/inspection fallback.
+        self._chunks = chunks if chunks is not None else load_chunks()
 
     def search(self, query: str, top_k: int | None = None) -> list[dict[str, Any]]:
         query_terms = _tokenize(query)
@@ -469,7 +471,8 @@ class CastGenieRagEnv(BaseEnv):
 
     def __init__(self, **kwargs: Any):
         super().__init__(**kwargs)
-        self.search = LocalJsonlSearch(top_k=5)
+        chunks = kwargs.get("chunks")
+        self.search = LocalJsonlSearch(top_k=5, chunks=chunks if isinstance(chunks, list) else None)
 
     async def list_tools(self):
         return [

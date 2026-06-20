@@ -211,6 +211,7 @@ def launch(args: argparse.Namespace) -> None:
     paths = require_workspace(workspace)
     train_data = normalize_dataset(read_jsonl(paths["train_dataset"]))
     eval_data = normalize_dataset(read_jsonl(paths["eval_dataset"]))
+    chunks = read_jsonl(paths["chunks"])
     base_model = os.environ.get("CASTFORM_BASE_MODEL") or "Qwen/Qwen3.5-4B"
     num_epochs = int(os.environ.get("CASTFORM_NUM_EPOCHS", "5"))
     run_name = f"castgenie-{Path(args.project_root).name}"
@@ -221,7 +222,7 @@ def launch(args: argparse.Namespace) -> None:
         "train_dataset": train_data,
         "eval_dataset": eval_data,
         "run_name": run_name,
-        "constructor_args": {},
+        "constructor_args": {"chunks": chunks},
         "local_modules": local_modules,
         **kwargs,
     }
@@ -266,20 +267,66 @@ def status(args: argparse.Namespace) -> None:
     TrainerClient, _upload_training_run = import_benchmax()
     trainer = TrainerClient(**trainer_kwargs())
     status_value = "running"
+    latest_message: str | None = None
+    error_message: str | None = None
+    error_count = 0
+
     for method_name in ["get_training_run", "retrieve_training_run", "get_run"]:
         method = getattr(trainer, method_name, None)
         if not callable(method):
             continue
         try:
-            result = method(args.castform_run_id)
+            try:
+                result = method(args.castform_run_id, include_config=False)
+            except TypeError:
+                result = method(args.castform_run_id)
             raw_status = getattr(result, "status", None)
             if isinstance(result, dict):
                 raw_status = result.get("status")
+                latest_message = result.get("latestEventMessage") or result.get("latestActivityMessage")
             if raw_status:
                 status_value = str(raw_status).lower()
                 break
         except Exception:
             continue
+
+    details_method = getattr(trainer, "get_run_details", None)
+    if callable(details_method):
+        try:
+            details = details_method(args.castform_run_id)
+            if isinstance(details, dict):
+                error_count = int(details.get("errorCount") or 0)
+                latest_message = (
+                    latest_message
+                    or details.get("latestEventMessage")
+                    or details.get("latestActivityMessage")
+                )
+        except Exception:
+            pass
+
+    if error_count > 0:
+        logs_method = getattr(trainer, "get_environment_logs", None)
+        if callable(logs_method):
+            try:
+                logs = logs_method(args.castform_run_id)
+                if isinstance(logs, list) and logs:
+                    latest_error = next(
+                        (
+                            item
+                            for item in reversed(logs)
+                            if isinstance(item, dict)
+                            and str(item.get("level") or "").upper() == "ERROR"
+                        ),
+                        logs[-1],
+                    )
+                    if isinstance(latest_error, dict):
+                        content = str(latest_error.get("content") or "").strip()
+                        traceback = str(latest_error.get("traceback") or "").strip()
+                        error_message = content or traceback[:1000] or f"Castform reported {error_count} environment error(s)."
+            except Exception:
+                error_message = f"Castform reported {error_count} environment error(s), but logs could not be retrieved."
+        if not error_message:
+            error_message = f"Castform reported {error_count} environment error(s)."
 
     complete_aliases = {"complete", "completed", "succeeded", "success", "finished", "hosted"}
     failed_aliases = {"failed", "error", "cancelled", "canceled"}
@@ -287,7 +334,7 @@ def status(args: argparse.Namespace) -> None:
         "complete"
         if status_value in complete_aliases
         else "failed"
-        if status_value in failed_aliases
+        if status_value in failed_aliases or error_count > 0
         else "running"
     )
     base_model = os.environ.get("CASTFORM_BASE_MODEL") or "Qwen/Qwen3.5-4B"
@@ -297,6 +344,10 @@ def status(args: argparse.Namespace) -> None:
         statusUrl=f"https://app.castform.com/train/{args.castform_run_id}",
         modelEndpoint=os.environ.get("CASTFORM_INFERENCE_BASE_URL", "https://llm.castform.com/v1"),
         modelName=f"ft:{base_model}:{args.castform_run_id}:latest",
+        providerStatus=status_value,
+        latestMessage=latest_message,
+        error=error_message,
+        errorCount=error_count,
     )
 
 
