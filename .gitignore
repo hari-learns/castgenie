@@ -36,6 +36,7 @@ yarn-error.log*
 
 # local generated project artifacts
 /storage/projects/
+/storage/demo-runs/
 !/storage/.gitkeep
 
 # vercel

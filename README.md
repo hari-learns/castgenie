@@ -18,7 +18,7 @@ The product thesis is simple: a user describes the expert assistant or model wor
 - Wave 16: real Castform RAG project generation with `run.py`, native train/eval datasets, corpus manifest, and readiness metadata.
 - Wave 17: real Castform validation, launch jobs, monitoring metadata, and hosted model version records.
 - Wave 18: product UX for real training status and hosted-model chat truthfulness.
-- Wave 19: planned end-to-end real demo hardening. See `docs/wave-15-19-plan.md`.
+- Wave 19: end-to-end real demo hardening with preflight, local proof, opt-in real Castform demo, hosted verification, and redacted reports. See `docs/wave-19-plan.md`.
 
 Current behavior still includes local preview infrastructure. The intended product path is real-source ingestion, Castform RAG training, and hosted-model chat.
 
@@ -50,6 +50,17 @@ pnpm lint
 pnpm test
 pnpm build
 ```
+
+Wave 19 demo commands:
+
+```bash
+pnpm demo:preflight
+pnpm demo:local
+CASTGENIE_DEMO_REAL_RUN=true pnpm demo:real
+pnpm demo:verify-hosted --project <projectId>
+```
+
+`demo:real` is explicitly paid-capable. It refuses to run unless `CASTGENIE_DEMO_REAL_RUN=true` is set, and it still obeys source-permission, Castform readiness, Supabase, Python, and `benchmax` gates.
 
 ## Supabase Setup
 
@@ -111,6 +122,14 @@ Use this 90-second local demo flow:
 7. Open Workflows and show that production workflows also require the hosted model.
 8. Open Files & Export and show the generated Castform project files.
 
+For the real demo path, use `docs/final-demo-runbook.md`. The short version is:
+
+1. Run `pnpm demo:preflight`.
+2. Run `pnpm demo:local` to prove the local no-spend path.
+3. Run `CASTGENIE_DEMO_REAL_RUN=true pnpm demo:real` only when credit spend is acceptable.
+4. If Castform training is still running, later run `pnpm demo:verify-hosted --project <projectId>`.
+5. Treat the product as ready only when the hosted Castform model version exists and the main chat provider is Castform.
+
 ## Final Local Demo Checklist
 
 - Create a project from an English prompt.
@@ -143,6 +162,7 @@ Generated project runs are ignored by Git. Important generated paths include:
 - `imports/web_scrape_report.json`
 - `logs/*.jsonl`
 - `castform_project/`
+- `storage/demo-runs/<runId>/report.json`
 
 ## Source Uploads
 

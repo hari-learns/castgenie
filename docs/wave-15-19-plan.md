@@ -73,8 +73,10 @@ Use Supabase for durable metadata, job state, Castform run tracking, training ev
   - launch real Castform training when readiness passes
   - show Castform run URL/status
   - chat through hosted Castform model once available
-- Add tests for Supabase repository adapters, readiness blockers, real-source-only training gates, Castform project generation, Python runner command construction, hosted model routing, and preview-vs-trained behavior.
-- Update README to state the real product contract: CastGenie is a Castform project generator and launcher, not a local RAG chatbot.
+- Add `pnpm demo:preflight`, `pnpm demo:local`, `pnpm demo:real`, and `pnpm demo:verify-hosted` so the demo path is repeatable and does not silently spend credits.
+- Write redacted demo reports under ignored `storage/demo-runs/`.
+- Add tests for redaction, paid-run gating, Exa allowed-domain permission handling, report shape, hosted model routing, and preview-vs-trained behavior.
+- Update README to state the real product contract: CastGenie is a Castform project generator and launcher, not a local RAG chatbot. See `docs/wave-19-plan.md` and `docs/final-demo-runbook.md`.
 
 ## Credential Checklist
 

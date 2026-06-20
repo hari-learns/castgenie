@@ -9,6 +9,10 @@
     "lint": "eslint",
     "test": "vitest run",
     "supabase:smoke": "tsx -r tsconfig-paths/register scripts/supabase-smoke.ts",
+    "demo:preflight": "tsx -r tsconfig-paths/register scripts/demo-preflight.ts",
+    "demo:local": "tsx -r tsconfig-paths/register scripts/demo-local.ts",
+    "demo:real": "tsx -r tsconfig-paths/register scripts/demo-real.ts",
+    "demo:verify-hosted": "tsx -r tsconfig-paths/register scripts/demo-verify-hosted.ts",
     "worker": "tsx -r tsconfig-paths/register scripts/castgenie-worker.ts",
     "worker:once": "tsx -r tsconfig-paths/register scripts/castgenie-worker.ts --once"
   },
