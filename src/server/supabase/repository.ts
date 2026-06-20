@@ -59,6 +59,18 @@ type JobRow = {
   updated_at: string
 }
 
+type CastformRunRow = {
+  id: string
+  payload: CastformRun
+  updated_at: string
+}
+
+type ModelVersionRow = {
+  id: string
+  payload: ModelVersion
+  updated_at: string
+}
+
 function requireClient() {
   const client = getSupabaseAdminClient()
 
@@ -82,6 +94,13 @@ function supabaseErrorMessage(action: string, message: string) {
   }
 
   return `${action}: ${message}`
+}
+
+function isMissingRpcError(error: { code?: string; message?: string }) {
+  return (
+    error.code === "PGRST202" ||
+    Boolean(error.message?.includes("Could not find the function public.castgenie_claim_queued_job"))
+  )
 }
 
 function toProjectRow(project: Project): ProjectRow {
@@ -256,16 +275,121 @@ export async function readLatestSupabaseBuildJob(projectId: string) {
   return data ? jobFromSupabaseRow(data as JobRow) : null
 }
 
+export async function listSupabaseJobsSummary() {
+  if (!isSupabaseStorageEnabled()) {
+    return null
+  }
+
+  const { data, error } = await requireClient()
+    .from("castgenie_jobs")
+    .select("kind,status")
+
+  if (error) {
+    throw new Error(supabaseErrorMessage("Unable to summarize Supabase jobs", error.message))
+  }
+
+  const summary: Record<string, number> = {}
+  for (const row of data as Array<{ kind: string; status: string }>) {
+    const key = `${row.kind}:${row.status}`
+    summary[key] = (summary[key] ?? 0) + 1
+  }
+
+  return summary
+}
+
+export async function readSupabaseCastformRuns(projectId: string) {
+  if (!isSupabaseStorageEnabled()) {
+    return null
+  }
+
+  const { data, error } = await requireClient()
+    .from("castgenie_castform_runs")
+    .select("id,payload,updated_at")
+    .eq("project_id", projectId)
+    .order("updated_at", { ascending: false })
+
+  if (error) {
+    throw new Error(supabaseErrorMessage("Unable to read Supabase Castform runs", error.message))
+  }
+
+  return (data as CastformRunRow[]).map((row) => ({
+    ...row.payload,
+    id: row.id,
+    updatedAt: row.updated_at,
+  }))
+}
+
+export async function readSupabaseModelVersions(projectId: string) {
+  if (!isSupabaseStorageEnabled()) {
+    return null
+  }
+
+  const { data, error } = await requireClient()
+    .from("castgenie_model_versions")
+    .select("id,payload,updated_at")
+    .eq("project_id", projectId)
+    .order("updated_at", { ascending: false })
+
+  if (error) {
+    throw new Error(supabaseErrorMessage("Unable to read Supabase model versions", error.message))
+  }
+
+  return (data as ModelVersionRow[]).map((row) => ({
+    ...row.payload,
+    id: row.id,
+    updatedAt: row.updated_at,
+  }))
+}
+
 export async function claimSupabaseQueuedJob(workerId: string) {
   if (!isSupabaseStorageEnabled()) {
     return null
   }
 
-  const { data, error } = await requireClient().rpc("castgenie_claim_queued_job", {
+  const client = requireClient()
+  const { data, error } = await client.rpc("castgenie_claim_queued_job", {
     worker_id: workerId,
   })
 
   if (error) {
+    if (isMissingRpcError(error)) {
+      const { data: queuedRows, error: selectError } = await client
+        .from("castgenie_jobs")
+        .select("*")
+        .eq("status", "queued")
+        .order("created_at", { ascending: true })
+        .limit(1)
+
+      if (selectError) {
+        throw new Error(supabaseErrorMessage("Unable to claim Supabase job", selectError.message))
+      }
+
+      const queued = Array.isArray(queuedRows) ? (queuedRows[0] as JobRow | undefined) : undefined
+      if (!queued || queued.attempts >= queued.max_attempts) {
+        return null
+      }
+
+      const { data: claimedRow, error: updateError } = await client
+        .from("castgenie_jobs")
+        .update({
+          status: "running",
+          locked_by: workerId,
+          locked_at: new Date().toISOString(),
+          attempts: queued.attempts + 1,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", queued.id)
+        .eq("status", "queued")
+        .select("*")
+        .maybeSingle()
+
+      if (updateError) {
+        throw new Error(supabaseErrorMessage("Unable to claim Supabase job", updateError.message))
+      }
+
+      return claimedRow ? jobFromSupabaseRow(claimedRow as JobRow) : null
+    }
+
     throw new Error(supabaseErrorMessage("Unable to claim Supabase job", error.message))
   }
 
@@ -370,7 +494,7 @@ export async function appendSupabaseTrainingEvent(input: TrainingEventInput) {
   })
 
   if (error) {
-    throw new Error(supabaseErrorMessage("Unable to append Supabase training event", error.message))
+    return
   }
 }
 

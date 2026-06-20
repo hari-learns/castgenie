@@ -13,6 +13,7 @@
     "demo:local": "tsx -r tsconfig-paths/register scripts/demo-local.ts",
     "demo:real": "tsx -r tsconfig-paths/register scripts/demo-real.ts",
     "demo:verify-hosted": "tsx -r tsconfig-paths/register scripts/demo-verify-hosted.ts",
+    "ops:status": "tsx -r tsconfig-paths/register scripts/lifecycle-status.ts",
     "worker": "tsx -r tsconfig-paths/register scripts/castgenie-worker.ts",
     "worker:once": "tsx -r tsconfig-paths/register scripts/castgenie-worker.ts --once"
   },

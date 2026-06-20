@@ -13,6 +13,8 @@ import {
 import { enqueueCastformTrainJob, updateAnyJob } from "@/server/jobs/queue"
 import {
   appendSupabaseTrainingEvent,
+  readSupabaseCastformRuns,
+  readSupabaseModelVersions,
   replaceSupabaseModelVersions,
   upsertSupabaseCastformRun,
 } from "@/server/supabase/repository"
@@ -116,6 +118,11 @@ async function appendProviderLog(record: Omit<CastformProviderLog, "id" | "creat
 }
 
 async function readRuns(projectId: string) {
+  const supabaseRuns = await readSupabaseCastformRuns(projectId).catch(() => null)
+  if (supabaseRuns && supabaseRuns.length > 0) {
+    return supabaseRuns
+  }
+
   const content = await readTextIfExists(projectArtifactPath(projectId, "castform", "runs.jsonl"))
   return content
     .split("\n")
@@ -125,7 +132,7 @@ async function readRuns(projectId: string) {
 
 async function appendRun(run: CastformRun) {
   await appendArtifactJsonl(run.projectId, "castform/runs.jsonl", [run])
-  await upsertSupabaseCastformRun(run)
+  await upsertSupabaseCastformRun(run).catch(() => undefined)
 }
 
 async function appendStatusHistory(run: CastformRun, event: Record<string, unknown> = {}) {
@@ -142,6 +149,11 @@ async function appendStatusHistory(run: CastformRun, event: Record<string, unkno
 }
 
 async function readModelVersions(projectId: string) {
+  const supabaseVersions = await readSupabaseModelVersions(projectId).catch(() => null)
+  if (supabaseVersions && supabaseVersions.length > 0) {
+    return supabaseVersions
+  }
+
   try {
     return await readJson<ModelVersion[]>(projectArtifactPath(projectId, "model_versions.json"))
   } catch {
@@ -151,7 +163,7 @@ async function readModelVersions(projectId: string) {
 
 async function writeModelVersions(projectId: string, versions: ModelVersion[]) {
   await writeArtifactJson(projectId, "model_versions.json", versions)
-  await replaceSupabaseModelVersions(projectId, versions)
+  await replaceSupabaseModelVersions(projectId, versions).catch(() => undefined)
 }
 
 function realConfig() {
@@ -539,10 +551,11 @@ export async function getCastformState(projectId: string): Promise<CastformRunsR
   const sortedRuns = runs.toSorted(
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   )
+  const latestRealRun = sortedRuns.find((run) => run.mode === "real")
 
   return {
     readiness,
-    latestRun: sortedRuns[0] ?? null,
+    latestRun: latestRealRun ?? sortedRuns[0] ?? null,
     runs: sortedRuns,
     modelVersions,
     config: realConfig(),

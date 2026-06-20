@@ -75,7 +75,7 @@ export async function enqueueBuildProjectJob(
   projectId: string,
   payload: Record<string, unknown> = {}
 ) {
-  const supabaseJob = await enqueueSupabaseBuildJob(projectId, payload)
+  const supabaseJob = await enqueueSupabaseBuildJob(projectId, payload).catch(() => null)
   const job = supabaseJob ?? createQueuedBuildJobRecord(projectId, payload)
 
   await writeBuildJob(job)
@@ -87,7 +87,7 @@ export async function enqueueCastformTrainJob(
   projectId: string,
   payload: { runId: string } & Record<string, unknown>
 ) {
-  const supabaseJob = await enqueueSupabaseJob(projectId, "castform_train", payload)
+  const supabaseJob = await enqueueSupabaseJob(projectId, "castform_train", payload).catch(() => null)
   const job = supabaseJob ?? createQueuedJobRecord(projectId, "castform_train", payload)
 
   await writeBuildJobToPath(projectId, "castform/jobs/latest_train_job.json", job)
@@ -95,18 +95,18 @@ export async function enqueueCastformTrainJob(
 }
 
 export async function readLatestBuildProjectJob(projectId: string) {
-  return (await readLatestSupabaseBuildJob(projectId)) ?? readBuildJob(projectId)
+  return (await readLatestSupabaseBuildJob(projectId).catch(() => null)) ?? readBuildJob(projectId)
 }
 
 export async function updateBuildProjectJob(job: BuildJob) {
   await writeBuildJob(job)
-  await updateSupabaseBuildJob(job.id, job)
+  await updateSupabaseBuildJob(job.id, job).catch(() => undefined)
 }
 
 export async function updateAnyJob(job: BuildJob & { kind?: JobKind }) {
   if (job.kind === "castform_train") {
     await writeBuildJobToPath(job.projectId, "castform/jobs/latest_train_job.json", job)
-    await updateSupabaseBuildJob(job.id, job)
+    await updateSupabaseBuildJob(job.id, job).catch(() => undefined)
     return
   }
 
@@ -154,7 +154,7 @@ async function claimLocalQueuedJob(): Promise<ClaimedJob | null> {
 }
 
 export async function claimNextJob(workerId = defaultWorkerId()) {
-  return (await claimSupabaseQueuedJob(workerId)) ?? claimLocalQueuedJob()
+  return (await claimSupabaseQueuedJob(workerId).catch(() => null)) ?? claimLocalQueuedJob()
 }
 
 export async function claimNextBuildProjectJob(workerId = defaultWorkerId()) {

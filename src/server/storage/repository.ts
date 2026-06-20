@@ -25,13 +25,13 @@ type CreateProjectInput = {
 
 export async function createProjectRecord(input: CreateProjectInput) {
   const project = await createProject(input)
-  await upsertSupabaseProject(project)
+  await upsertSupabaseProject(project).catch(() => undefined)
   return project
 }
 
 export async function readProjectRecord(projectId: string) {
   if (isSupabaseStorageEnabled()) {
-    const project = await readSupabaseProject(projectId)
+    const project = await readSupabaseProject(projectId).catch(() => null)
     if (project) {
       return project
     }
@@ -42,7 +42,7 @@ export async function readProjectRecord(projectId: string) {
 
 export async function listProjectRecords() {
   if (isSupabaseStorageEnabled()) {
-    const projects = await listSupabaseProjects()
+    const projects = await listSupabaseProjects().catch(() => null)
     if (projects) {
       return projects
     }
@@ -53,23 +53,23 @@ export async function listProjectRecords() {
 
 export async function writeProjectRecord(project: Project) {
   await writeProject(project)
-  await upsertSupabaseProject(project)
-  await upsertSupabaseArtifactManifest(project)
-  await upsertSupabaseSourcesSummary(project)
+  await upsertSupabaseProject(project).catch(() => undefined)
+  await upsertSupabaseArtifactManifest(project).catch(() => undefined)
+  await upsertSupabaseSourcesSummary(project).catch(() => undefined)
 }
 
 export async function updateProjectRecord(projectId: string, patch: Partial<Project>) {
   const project = await updateProject(projectId, patch)
 
   if (project) {
-    await upsertSupabaseProject(project)
+    await upsertSupabaseProject(project).catch(() => undefined)
   }
 
   return project
 }
 
 export async function mirrorProjectRecord(project: Project) {
-  await upsertSupabaseProject(project)
-  await upsertSupabaseArtifactManifest(project)
-  await upsertSupabaseSourcesSummary(project)
+  await upsertSupabaseProject(project).catch(() => undefined)
+  await upsertSupabaseArtifactManifest(project).catch(() => undefined)
+  await upsertSupabaseSourcesSummary(project).catch(() => undefined)
 }
