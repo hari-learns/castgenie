@@ -180,6 +180,10 @@ function realConfig() {
   }
 }
 
+function servingBaseModelId(baseModel: string) {
+  return process.env.CASTFORM_SERVING_BASE_ID || baseModel.split("/").at(-1)?.toLowerCase() || baseModel.toLowerCase()
+}
+
 export async function computeTrainingReadiness(projectId: string): Promise<TrainingReadiness> {
   const artifacts = await readProjectArtifacts(projectId)
   const [
@@ -462,23 +466,28 @@ async function ensureHostedModelVersion(run: CastformRun, modelName?: string) {
   }
 
   const versions = await readModelVersions(run.projectId)
+  const config = realConfig()
 
-  if (versions.some((version) => version.sourceRunId === run.id && version.status === "hosted")) {
+  const nextModelName = modelName ?? `ft:${servingBaseModelId(config.baseModel)}:${run.castformRunId}:latest`
+  const existingHosted = versions.find(
+    (version) => version.sourceRunId === run.id && version.status === "hosted"
+  )
+  if (existingHosted?.modelName === nextModelName) {
     return
   }
 
-  const config = realConfig()
   await writeModelVersions(run.projectId, [
     {
-      ...mockModelVersion(run.projectId, run),
+      ...(existingHosted ?? mockModelVersion(run.projectId, run)),
       id: `model_real_${nanoid(10)}`,
       status: "hosted",
       castformRunId: run.castformRunId,
       statusUrl: run.statusUrl,
       modelEndpoint: config.inferenceBaseUrl,
-      modelName: modelName ?? `ft:${config.baseModel}:${run.castformRunId}:latest`,
+      modelName: nextModelName,
+      updatedAt: now(),
     },
-    ...versions,
+    ...versions.filter((version) => version.id !== existingHosted?.id),
   ])
 }
 

@@ -174,6 +174,13 @@ def trainer_kwargs() -> dict[str, Any]:
     return kwargs
 
 
+def serving_base_model_id(base_model: str) -> str:
+    override = os.environ.get("CASTFORM_SERVING_BASE_ID")
+    if override:
+        return override
+    return base_model.rsplit("/", 1)[-1].lower()
+
+
 def object_to_kwargs(value: Any) -> dict[str, Any]:
     if dataclasses.is_dataclass(value):
         return dataclasses.asdict(value)
@@ -213,6 +220,7 @@ def launch(args: argparse.Namespace) -> None:
     eval_data = normalize_dataset(read_jsonl(paths["eval_dataset"]))
     chunks = read_jsonl(paths["chunks"])
     base_model = os.environ.get("CASTFORM_BASE_MODEL") or "Qwen/Qwen3.5-4B"
+    serving_model = serving_base_model_id(base_model)
     num_epochs = int(os.environ.get("CASTFORM_NUM_EPOCHS", "5"))
     run_name = f"castgenie-{Path(args.project_root).name}"
     kwargs = trainer_kwargs()
@@ -253,7 +261,7 @@ def launch(args: argparse.Namespace) -> None:
         castformRunId=run_id,
         statusUrl=f"https://app.castform.com/train/{run_id}",
         modelEndpoint=os.environ.get("CASTFORM_INFERENCE_BASE_URL", "https://llm.castform.com/v1"),
-        modelName=f"ft:{base_model}:{run_id}:latest",
+        modelName=f"ft:{serving_model}:{run_id}:latest",
         launchConfig={"runName": run_name, "baseModel": base_model, "numEpochs": num_epochs},
     )
 
@@ -338,12 +346,13 @@ def status(args: argparse.Namespace) -> None:
         else "running"
     )
     base_model = os.environ.get("CASTFORM_BASE_MODEL") or "Qwen/Qwen3.5-4B"
+    serving_model = serving_base_model_id(base_model)
     response(
         status=normalized_status,
         castformRunId=args.castform_run_id,
         statusUrl=f"https://app.castform.com/train/{args.castform_run_id}",
         modelEndpoint=os.environ.get("CASTFORM_INFERENCE_BASE_URL", "https://llm.castform.com/v1"),
-        modelName=f"ft:{base_model}:{args.castform_run_id}:latest",
+        modelName=f"ft:{serving_model}:{args.castform_run_id}:latest",
         providerStatus=status_value,
         latestMessage=latest_message,
         error=error_message,
