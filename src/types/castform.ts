@@ -45,10 +45,28 @@ export type CastformProviderLog = {
   projectId: string
   runId?: string
   mode: CastformRunMode
-  operation: "readiness" | "create_run" | "refresh_run"
+  operation:
+    | "readiness"
+    | "create_run"
+    | "enqueue_run"
+    | "preflight"
+    | "validate"
+    | "launch"
+    | "refresh_run"
   status: "success" | "blocked" | "failed"
   message: string
   createdAt: string
+}
+
+export type CastformValidationReport = {
+  status: "passed" | "failed"
+  checkedAt: string
+  workspace: string
+  trainRows: number
+  evalRows: number
+  corpusChunks: number
+  warnings: string[]
+  errors: string[]
 }
 
 export type CastformRun = {
@@ -72,6 +90,10 @@ export type CastformRun = {
   statusUrl?: string
   castformRunId?: string
   modelEndpoint?: string
+  modelName?: string
+  validationReportPath?: string
+  launchConfigPath?: string
+  providerJobId?: string
   refreshCount: number
   error?: string
 }

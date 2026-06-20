@@ -1,8 +1,12 @@
-import { maybeAutoLaunchCastformRun } from "@/server/castform/runs"
 import {
-  claimNextBuildProjectJob,
+  executeCastformTrainingJob,
+  maybeAutoLaunchCastformRun,
+} from "@/server/castform/runs"
+import {
+  claimNextJob,
   defaultWorkerId,
-  markBuildProjectJobFailed,
+  markAnyJobFailed,
+  updateAnyJob,
   updateBuildProjectJob,
 } from "@/server/jobs/queue"
 import { runBuildJob } from "@/server/jobs/runner"
@@ -22,6 +26,7 @@ type WorkerResult =
       projectId: string
       jobId: string
       castformRunId?: string
+      kind: string
     }
   | {
       status: "failed"
@@ -32,7 +37,7 @@ type WorkerResult =
 
 export async function processOneBuildJob(options: WorkerOptions = {}): Promise<WorkerResult> {
   const workerId = options.workerId ?? defaultWorkerId()
-  const job = await claimNextBuildProjectJob(workerId)
+  const job = await claimNextJob(workerId)
 
   if (!job) {
     return { status: "idle" }
@@ -41,12 +46,56 @@ export async function processOneBuildJob(options: WorkerOptions = {}): Promise<W
   await appendSupabaseTrainingEvent({
     projectId: job.projectId,
     jobId: job.id,
-    eventType: "build_job_claimed",
-    message: `Build job ${job.id} claimed by ${workerId}.`,
-    payload: { workerId },
+    eventType: "job_claimed",
+    message: `${job.kind} job ${job.id} claimed by ${workerId}.`,
+    payload: { workerId, kind: job.kind },
   })
 
   try {
+    if (job.kind === "castform_train") {
+      const castformJob = {
+        ...job,
+        kind: "castform_train" as const,
+      }
+      const runId = typeof job.payload.runId === "string" ? job.payload.runId : ""
+      if (!runId) {
+        throw new Error("Castform train job payload is missing runId.")
+      }
+
+      const run = await executeCastformTrainingJob(job.projectId, runId, castformJob)
+      await updateAnyJob({
+        ...castformJob,
+        status: run.status === "failed" || run.status === "blocked" ? "failed" : "complete",
+        currentStep: run.status === "failed" || run.status === "blocked"
+          ? "castform_training_failed"
+          : "castform_training_launched",
+        progress: run.status === "failed" || run.status === "blocked" ? run.progress : 100,
+        error: run.error,
+        updatedAt: new Date().toISOString(),
+      })
+      await appendSupabaseTrainingEvent({
+        projectId: job.projectId,
+        jobId: castformJob.id,
+        runId,
+        level: run.status === "failed" || run.status === "blocked" ? "error" : "info",
+        eventType: "castform_train_job_completed",
+        message: `Castform train job ${job.id} completed with run status ${run.status}.`,
+        payload: {
+          castformRunId: run.castformRunId,
+          statusUrl: run.statusUrl,
+          modelName: run.modelName,
+        },
+      })
+
+      return {
+        status: "processed",
+        projectId: job.projectId,
+        jobId: job.id,
+        castformRunId: run.castformRunId ?? run.id,
+        kind: job.kind,
+      }
+    }
+
     const build = await runBuildJob(job.projectId, {
       jobId: job.id,
       onJobUpdate: updateBuildProjectJob,
@@ -73,16 +122,18 @@ export async function processOneBuildJob(options: WorkerOptions = {}): Promise<W
       projectId: job.projectId,
       jobId: job.id,
       castformRunId: castformRun?.id,
+      kind: job.kind,
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown build worker error"
-    await markBuildProjectJobFailed(job, message)
+    await markAnyJobFailed(job, message)
     await appendSupabaseTrainingEvent({
       projectId: job.projectId,
       jobId: job.id,
       level: "error",
-      eventType: "build_job_failed",
+      eventType: "job_failed",
       message,
+      payload: { kind: job.kind },
     })
 
     return {

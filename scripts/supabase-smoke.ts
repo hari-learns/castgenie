@@ -31,6 +31,22 @@ async function main() {
     )
   }
 
+  const { count: queuedCount, error: queuedError } = await client
+    .from("castgenie_jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "queued")
+
+  if (queuedError) {
+    throw new Error(`Unable to inspect Supabase queue. Original error: ${queuedError.message}`)
+  }
+
+  if ((queuedCount ?? 0) > 0) {
+    console.log(
+      `Supabase Wave 15 schema ok. Skipped claim RPC smoke because ${queuedCount} queued job(s) exist.`
+    )
+    return
+  }
+
   const { error: rpcError } = await client.rpc("castgenie_claim_queued_job", {
     worker_id: "smoke_check",
   })

@@ -5,7 +5,7 @@ import { projectArtifactPath, projectRoot } from "@/lib/paths"
 
 export async function runCastformPython(input: {
   projectId: string
-  operation: "launch" | "status"
+  operation: "preflight" | "validate" | "launch" | "status"
   pythonBin: string
   castformRunId?: string
 }) {
@@ -27,13 +27,29 @@ export async function runCastformPython(input: {
     args.push("--castform-run-id", input.castformRunId)
   }
 
+  const timeout =
+    input.operation === "preflight" || input.operation === "status" ? 120_000 : 900_000
+  const redactedValues = [
+    process.env.CASTFORM_API_KEY,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    process.env.EXA_API_KEY,
+    process.env.GEMINI_API_KEY,
+  ].filter((value): value is string => Boolean(value))
+
+  function redact(value: string) {
+    return redactedValues.reduce(
+      (text, secret) => text.replaceAll(secret, "[REDACTED]"),
+      value
+    )
+  }
+
   return new Promise<string>((resolve, reject) => {
     execFile(
       input.pythonBin,
       args,
       {
         cwd: projectRoot(input.projectId),
-        timeout: 180_000,
+        timeout,
         env: {
           ...process.env,
           CASTFORM_API_KEY: process.env.CASTFORM_API_KEY ?? "",
@@ -45,13 +61,23 @@ export async function runCastformPython(input: {
         },
         maxBuffer: 1024 * 1024,
       },
-      (error, output) => {
-        if (output.trim()) {
-          resolve(output)
+      (error, output, stderr) => {
+        const cleanOutput = redact(output.trim())
+        const cleanError = redact(stderr.trim())
+
+        if (cleanOutput) {
+          resolve(cleanOutput)
           return
         }
 
-        reject(error ?? new Error("Castform runner produced no output."))
+        reject(
+          error ??
+            new Error(
+              cleanError
+                ? `Castform runner produced no JSON output: ${cleanError}`
+                : "Castform runner produced no output."
+            )
+        )
       }
     )
   })

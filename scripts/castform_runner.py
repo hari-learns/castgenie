@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import importlib.util
 import json
 import os
 import sys
@@ -18,6 +19,12 @@ from typing import Any
 
 def response(**kwargs: object) -> None:
     print(json.dumps(kwargs, separators=(",", ":")))
+
+
+def read_json(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        raise RuntimeError(f"Missing required JSON artifact: {path.name}")
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -38,6 +45,7 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
 def require_workspace(workspace: Path) -> dict[str, Path]:
     config = workspace / "config.yaml"
     run_py = workspace / "run.py"
+    env_py = workspace / "src" / "env.py"
     chunks = workspace / "data" / "chunks.jsonl"
     corpus_manifest = workspace / "data" / "corpus_manifest.json"
     train_dataset = workspace / "train_dataset.jsonl"
@@ -45,13 +53,25 @@ def require_workspace(workspace: Path) -> dict[str, Path]:
     rag_readiness = workspace / "rag_readiness.json"
     reward_spec = workspace / "rewards" / "reward_spec.json"
 
-    for path in [config, run_py, chunks, corpus_manifest, train_dataset, eval_dataset, rag_readiness, reward_spec]:
+    required_paths = [
+        config,
+        run_py,
+        env_py,
+        chunks,
+        corpus_manifest,
+        train_dataset,
+        eval_dataset,
+        rag_readiness,
+        reward_spec,
+    ]
+    for path in required_paths:
         if not path.exists():
             raise RuntimeError(f"Required Castform artifact is missing: {path.relative_to(workspace)}")
 
     return {
         "config": config,
         "run_py": run_py,
+        "env_py": env_py,
         "chunks": chunks,
         "corpus_manifest": corpus_manifest,
         "train_dataset": train_dataset,
@@ -61,126 +81,170 @@ def require_workspace(workspace: Path) -> dict[str, Path]:
     }
 
 
-def normalize_dataset(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    normalized: list[dict[str, Any]] = []
-    for row in rows:
-        prompt = row.get("question") or row.get("prompt")
-        ground_truth = row.get("answer") or row.get("expectedAnswer") or row.get("ground_truth")
-        if not prompt or not ground_truth:
-            continue
-        normalized.append(
-            {
-                "prompt": str(prompt),
-                "ground_truth": str(ground_truth),
-                "metadata": {
-                    "id": row.get("id"),
-                    "topic": row.get("topic"),
-                    "reference_chunks": row.get("reference_chunks", []),
-                    "sourceIds": row.get("sourceIds", []),
-                    "chunkIds": row.get("chunkIds", []),
-                    "difficulty": row.get("difficulty"),
-                },
-            }
-        )
-
-    if not normalized:
-        raise RuntimeError("No trainable prompt/ground_truth rows were produced.")
-
-    return normalized
-
-
-def import_benchmax():
+def import_benchmax() -> tuple[Any, Any]:
     try:
-        from benchmax.envs.base_env import BaseEnv
         from benchmax.platform.client import TrainerClient
         from benchmax.platform.training_run import upload_training_run
     except Exception as exc:  # pragma: no cover - depends on optional local package
         raise RuntimeError("benchmax is not installed in the configured Python runtime") from exc
 
-    return BaseEnv, TrainerClient, upload_training_run
+    return TrainerClient, upload_training_run
 
 
-def make_env_class():
-    BaseEnv, _TrainerClient, _upload_training_run = import_benchmax()
+def import_workspace_env(workspace: Path) -> type[Any]:
+    run_path = workspace / "run.py"
+    sys.path.insert(0, str(workspace))
+    spec = importlib.util.spec_from_file_location("castgenie_generated_run", run_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("Unable to import generated Castform run.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    env_class = getattr(module, "Env", None) or getattr(module, "CastGenieRagEnv", None)
+    if env_class is None:
+        raise RuntimeError("Generated run.py must export Env or CastGenieRagEnv")
+    return env_class
 
-    class CastGenieRagEnv(BaseEnv):  # type: ignore[misc, valid-type]
-        system_prompt = (
-            "Answer using the provided project corpus. Prefer source-grounded, "
-            "specific answers. If the corpus is insufficient, say so clearly."
+
+def normalize_dataset(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for row in rows:
+        question = str(row.get("question") or "").strip()
+        answer = str(row.get("answer") or "").strip()
+        reference_chunks = row.get("reference_chunks")
+        if not question or not answer or not isinstance(reference_chunks, list) or not reference_chunks:
+            continue
+        normalized.append(
+            {
+                **row,
+                "prompt": question,
+                "ground_truth": answer,
+            }
         )
-        recommended_max_turns = 4
 
-        async def list_tools(self):
-            return []
+    if not normalized:
+        raise RuntimeError("No trainable question/answer rows were produced.")
 
-        async def run_tool(self, rollout_id, tool_name, **tool_args):
-            return {"error": f"Unknown tool: {tool_name}"}
+    return normalized
 
-        async def compute_reward(self, rollout_id, messages, task, **kwargs):
-            output = ""
-            if messages:
-                last = messages[-1]
-                if isinstance(last, dict):
-                    output = str(last.get("content", ""))
-                else:
-                    output = str(getattr(last, "content", ""))
 
-            ground_truth = str(task.get("ground_truth", ""))
-            lowered = output.lower()
-            truth_terms = [term for term in ground_truth.lower().split() if len(term) > 4]
-            overlap = sum(1 for term in set(truth_terms[:40]) if term in lowered)
-            validity = 1.0 if output.strip() and "source" in lowered or "chunk" in lowered else 0.5
-            grounding = min(1.0, overlap / max(1, min(len(set(truth_terms)), 12)))
-            return {"validity": validity, "grounding": grounding}
+def validate_workspace(workspace: Path) -> dict[str, Any]:
+    paths = require_workspace(workspace)
+    train_rows = normalize_dataset(read_jsonl(paths["train_dataset"]))
+    eval_rows = normalize_dataset(read_jsonl(paths["eval_dataset"]))
+    chunk_rows = read_jsonl(paths["chunks"])
+    rag_readiness = read_json(paths["rag_readiness"])
+    errors: list[str] = []
+    warnings: list[str] = []
 
-    return CastGenieRagEnv
+    if len(chunk_rows) < 3:
+        errors.append("Castform corpus must contain at least 3 chunks.")
+    if len(train_rows) < 1 or len(eval_rows) < 1:
+        errors.append("Castform train and eval datasets must each contain at least one valid row.")
+    if rag_readiness.get("readyForRealTraining") is not True:
+        errors.extend(str(item) for item in rag_readiness.get("blockingIssues", []))
+    warnings.extend(str(item) for item in rag_readiness.get("warnings", []))
+
+    return {
+        "status": "failed" if errors else "passed",
+        "trainRows": len(train_rows),
+        "evalRows": len(eval_rows),
+        "corpusChunks": len(chunk_rows),
+        "warnings": warnings,
+        "errors": errors,
+    }
+
+
+def trainer_kwargs() -> dict[str, Any]:
+    api_key = os.environ.get("CASTFORM_API_KEY")
+    base_url = os.environ.get("CASTFORM_BASE_URL")
+    if not api_key:
+        raise RuntimeError("CASTFORM_API_KEY is not configured")
+    kwargs: dict[str, Any] = {"api_key": api_key}
+    if base_url and base_url != "your_castform_base_url_here":
+        kwargs["base_url"] = base_url
+    return kwargs
+
+
+def object_to_kwargs(value: Any) -> dict[str, Any]:
+    if dataclasses.is_dataclass(value):
+        return dataclasses.asdict(value)
+    if isinstance(value, dict):
+        return value
+    if hasattr(value, "__dict__"):
+        return dict(value.__dict__)
+    raise RuntimeError("Castform upload_training_run returned an unsupported object.")
+
+
+def preflight(args: argparse.Namespace) -> None:
+    workspace = Path(args.workspace)
+    require_workspace(workspace)
+    import_benchmax()
+    import_workspace_env(workspace)
+    response(status="ok", workspace=str(workspace))
+
+
+def validate(args: argparse.Namespace) -> None:
+    workspace = Path(args.workspace)
+    import_benchmax()
+    import_workspace_env(workspace)
+    response(**validate_workspace(workspace))
 
 
 def launch(args: argparse.Namespace) -> None:
     workspace = Path(args.workspace)
-    paths = require_workspace(workspace)
-    api_key = os.environ.get("CASTFORM_API_KEY")
-    base_url = os.environ.get("CASTFORM_BASE_URL")
-    base_model = os.environ.get("CASTFORM_BASE_MODEL") or "Qwen/Qwen3.5-4B"
+    validation = validate_workspace(workspace)
+    if validation["status"] == "failed":
+        response(status="failed", error="Castform validation failed", **validation)
+        return
 
-    if not api_key:
-        raise RuntimeError("CASTFORM_API_KEY is not configured")
-    _BaseEnv, TrainerClient, upload_training_run = import_benchmax()
-    env_class = make_env_class()
+    TrainerClient, upload_training_run = import_benchmax()
+    env_class = import_workspace_env(workspace)
+    paths = require_workspace(workspace)
     train_data = normalize_dataset(read_jsonl(paths["train_dataset"]))
     eval_data = normalize_dataset(read_jsonl(paths["eval_dataset"]))
+    base_model = os.environ.get("CASTFORM_BASE_MODEL") or "Qwen/Qwen3.5-4B"
+    num_epochs = int(os.environ.get("CASTFORM_NUM_EPOCHS", "5"))
     run_name = f"castgenie-{Path(args.project_root).name}"
+    kwargs = trainer_kwargs()
+
     upload_kwargs: dict[str, Any] = {
         "env_class": env_class,
         "train_dataset": train_data,
         "eval_dataset": eval_data,
         "run_name": run_name,
-        "api_key": api_key,
         "constructor_args": {},
+        "local_modules": [str(workspace / "src")],
+        **kwargs,
     }
-    if base_url and base_url != "your_castform_base_url_here":
-        upload_kwargs["base_url"] = base_url
-
     uploaded = upload_training_run(**upload_kwargs)
-    trainer_kwargs: dict[str, Any] = {"api_key": api_key}
-    if base_url and base_url != "your_castform_base_url_here":
-        trainer_kwargs["base_url"] = base_url
-    trainer = TrainerClient(**trainer_kwargs)
+    trainer = TrainerClient(**kwargs)
+    launcher_args: dict[str, Any] = {
+        "model": base_model,
+        "num_epochs": num_epochs,
+    }
+    list_args = getattr(trainer, "list_launch_args", None)
+    if callable(list_args):
+        try:
+            supported = set(str(item) for item in list_args())
+            launcher_args = {
+                key: value for key, value in launcher_args.items() if key in supported or not supported
+            }
+        except Exception:
+            pass
+
     run_id = trainer.launch_training_run(
         training_run_type="simple",
-        **dataclasses.asdict(uploaded),
-        launcher_args={
-            "model": base_model,
-            "num_epochs": int(os.environ.get("CASTFORM_NUM_EPOCHS", "5")),
-        },
+        **object_to_kwargs(uploaded),
+        launcher_args=launcher_args,
     )
     run_id = str(run_id)
     response(
         status="queued",
         castformRunId=run_id,
-        statusUrl=f"https://app.castform.com/experiments/{run_id}",
+        statusUrl=f"https://app.castform.com/train/{run_id}",
         modelEndpoint=os.environ.get("CASTFORM_INFERENCE_BASE_URL", "https://llm.castform.com/v1"),
         modelName=f"ft:{base_model}:{run_id}:latest",
+        launchConfig={"runName": run_name, "baseModel": base_model, "numEpochs": num_epochs},
     )
 
 
@@ -190,16 +254,8 @@ def status(args: argparse.Namespace) -> None:
     if not args.castform_run_id:
         raise RuntimeError("Missing Castform run id for status refresh")
 
-    api_key = os.environ.get("CASTFORM_API_KEY")
-    base_url = os.environ.get("CASTFORM_BASE_URL")
-    if not api_key:
-        raise RuntimeError("CASTFORM_API_KEY is not configured")
-
-    _BaseEnv, TrainerClient, _upload_training_run = import_benchmax()
-    trainer_kwargs: dict[str, Any] = {"api_key": api_key}
-    if base_url and base_url != "your_castform_base_url_here":
-        trainer_kwargs["base_url"] = base_url
-    trainer = TrainerClient(**trainer_kwargs)
+    TrainerClient, _upload_training_run = import_benchmax()
+    trainer = TrainerClient(**trainer_kwargs())
     status_value = "running"
     for method_name in ["get_training_run", "retrieve_training_run", "get_run"]:
         method = getattr(trainer, method_name, None)
@@ -216,7 +272,7 @@ def status(args: argparse.Namespace) -> None:
         except Exception:
             continue
 
-    complete_aliases = {"complete", "completed", "succeeded", "success", "finished"}
+    complete_aliases = {"complete", "completed", "succeeded", "success", "finished", "hosted"}
     failed_aliases = {"failed", "error", "cancelled", "canceled"}
     normalized_status = (
         "complete"
@@ -229,7 +285,7 @@ def status(args: argparse.Namespace) -> None:
     response(
         status=normalized_status,
         castformRunId=args.castform_run_id,
-        statusUrl=f"https://app.castform.com/experiments/{args.castform_run_id}",
+        statusUrl=f"https://app.castform.com/train/{args.castform_run_id}",
         modelEndpoint=os.environ.get("CASTFORM_INFERENCE_BASE_URL", "https://llm.castform.com/v1"),
         modelName=f"ft:{base_model}:{args.castform_run_id}:latest",
     )
@@ -237,14 +293,18 @@ def status(args: argparse.Namespace) -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("operation", choices=["launch", "status"])
+    parser.add_argument("operation", choices=["preflight", "validate", "launch", "status"])
     parser.add_argument("--project-root", required=True)
     parser.add_argument("--workspace", required=True)
     parser.add_argument("--castform-run-id")
     args = parser.parse_args()
 
     try:
-        if args.operation == "launch":
+        if args.operation == "preflight":
+            preflight(args)
+        elif args.operation == "validate":
+            validate(args)
+        elif args.operation == "launch":
             launch(args)
         else:
             status(args)

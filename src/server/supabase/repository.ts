@@ -2,16 +2,20 @@ import { nanoid } from "nanoid"
 
 import { getSupabaseAdminClient, isSupabaseStorageEnabled } from "@/server/supabase/client"
 import type { CastformRun, ModelVersion } from "@/types/castform"
-import type { BuildJob, JobStatus } from "@/types/jobs"
+import type { BuildJob, JobKind, JobStatus } from "@/types/jobs"
 import type { Project } from "@/types/project"
 
 export { isSupabaseStorageEnabled }
 
-export type SupabaseBuildJob = BuildJob & {
-  kind: "build_project"
+export type SupabaseJob = BuildJob & {
+  kind: JobKind
   attempts: number
   maxAttempts: number
   payload: Record<string, unknown>
+}
+
+export type SupabaseBuildJob = SupabaseJob & {
+  kind: "build_project"
 }
 
 export type TrainingEventInput = {
@@ -43,7 +47,7 @@ type ProjectRow = {
 type JobRow = {
   id: string
   project_id: string
-  kind: "build_project"
+  kind: JobKind
   status: JobStatus
   current_step: string | null
   progress: number
@@ -116,7 +120,7 @@ export function projectFromSupabaseRow(row: ProjectRow): Project {
   }
 }
 
-function jobFromSupabaseRow(row: JobRow): SupabaseBuildJob {
+function jobFromSupabaseRow(row: JobRow): SupabaseJob {
   return {
     id: row.id,
     projectId: row.project_id,
@@ -182,16 +186,20 @@ export async function listSupabaseProjects() {
   return (data as ProjectRow[]).map(projectFromSupabaseRow)
 }
 
-export async function enqueueSupabaseBuildJob(projectId: string, payload: Record<string, unknown> = {}) {
+export async function enqueueSupabaseJob(
+  projectId: string,
+  kind: JobKind,
+  payload: Record<string, unknown> = {}
+) {
   if (!isSupabaseStorageEnabled()) {
     return null
   }
 
   const now = new Date().toISOString()
-  const job: SupabaseBuildJob = {
+  const job: SupabaseJob = {
     id: `job_${nanoid(10)}`,
     projectId,
-    kind: "build_project",
+    kind,
     status: "queued",
     currentStep: "queued",
     progress: 0,
@@ -222,6 +230,11 @@ export async function enqueueSupabaseBuildJob(projectId: string, payload: Record
   return job
 }
 
+export async function enqueueSupabaseBuildJob(projectId: string, payload: Record<string, unknown> = {}) {
+  const job = await enqueueSupabaseJob(projectId, "build_project", payload)
+  return job as SupabaseBuildJob | null
+}
+
 export async function readLatestSupabaseBuildJob(projectId: string) {
   if (!isSupabaseStorageEnabled()) {
     return null
@@ -231,6 +244,7 @@ export async function readLatestSupabaseBuildJob(projectId: string) {
     .from("castgenie_jobs")
     .select("*")
     .eq("project_id", projectId)
+    .eq("kind", "build_project")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle()

@@ -10,6 +10,7 @@ import {
   readTextIfExists,
   writeArtifactJson,
 } from "@/lib/storage"
+import { enqueueCastformTrainJob, updateAnyJob } from "@/server/jobs/queue"
 import {
   appendSupabaseTrainingEvent,
   replaceSupabaseModelVersions,
@@ -23,8 +24,10 @@ import type {
   CastformRunMode,
   CastformRunsResponse,
   ModelVersion,
+  CastformValidationReport,
   TrainingReadiness,
 } from "@/types/castform"
+import type { BuildJob } from "@/types/jobs"
 
 const castformArtifactPaths = {
   workspace: "castform_project",
@@ -39,8 +42,6 @@ const castformArtifactPaths = {
   actionTasks: "datasets/action_tasks.jsonl",
   rewardSpec: "rewards/reward_spec.json",
 }
-const launchDeferredForWave16 = true
-
 function now() {
   return new Date().toISOString()
 }
@@ -125,6 +126,19 @@ async function readRuns(projectId: string) {
 async function appendRun(run: CastformRun) {
   await appendArtifactJsonl(run.projectId, "castform/runs.jsonl", [run])
   await upsertSupabaseCastformRun(run)
+}
+
+async function appendStatusHistory(run: CastformRun, event: Record<string, unknown> = {}) {
+  await appendArtifactJsonl(run.projectId, "castform/status_history.jsonl", [
+    {
+      timestamp: now(),
+      runId: run.id,
+      castformRunId: run.castformRunId,
+      status: run.status,
+      progress: run.progress,
+      ...event,
+    },
+  ])
 }
 
 async function readModelVersions(projectId: string) {
@@ -461,7 +475,34 @@ export async function getHostedModelVersion(projectId: string) {
   return versions.find((version) => version.status === "hosted" && version.modelName)
 }
 
-async function callPythonRunner(projectId: string, operation: "launch" | "status", run?: CastformRun) {
+type CastformRunnerResult = {
+  status: "ok" | "passed" | "queued" | "running" | "complete" | "failed"
+  castformRunId?: string
+  statusUrl?: string
+  modelEndpoint?: string
+  modelName?: string
+  trainRows?: number
+  evalRows?: number
+  corpusChunks?: number
+  warnings?: string[]
+  errors?: string[]
+  launchConfig?: Record<string, unknown>
+  error?: string
+}
+
+function toRunStatus(result: CastformRunnerResult["status"]): CastformRun["status"] {
+  if (result === "complete" || result === "failed" || result === "queued" || result === "running") {
+    return result
+  }
+
+  return result === "ok" || result === "passed" ? "running" : "failed"
+}
+
+async function callPythonRunner(
+  projectId: string,
+  operation: "preflight" | "validate" | "launch" | "status",
+  run?: CastformRun
+) {
   const config = realConfig()
   const { runCastformPython } = await import("@/server/castform/python-runner")
   const stdout = await runCastformPython({
@@ -471,14 +512,16 @@ async function callPythonRunner(projectId: string, operation: "launch" | "status
     castformRunId: run?.castformRunId,
   })
 
-  return JSON.parse(stdout) as {
-    status: "queued" | "running" | "complete" | "failed"
-    castformRunId?: string
-    statusUrl?: string
-    modelEndpoint?: string
-    modelName?: string
-    error?: string
-  }
+  return JSON.parse(stdout) as CastformRunnerResult
+}
+
+function realRunBlockers(readiness: TrainingReadiness, config = realConfig()) {
+  return [
+    ...readiness.blockingIssues,
+    ...(!config.realRunsEnabled ? ["CASTFORM_REAL_RUNS_ENABLED is not true."] : []),
+    ...(!config.hasApiKey ? ["CASTFORM_API_KEY is not configured."] : []),
+    ...(!config.pythonBin ? ["CASTFORM_PYTHON_BIN is not configured."] : []),
+  ]
 }
 
 export async function getCastformState(projectId: string): Promise<CastformRunsResponse | null> {
@@ -530,14 +573,7 @@ export async function createCastformRun(projectId: string, mode: CastformRunMode
   }
 
   if (mode === "real") {
-    const blockers = [
-      ...readiness.blockingIssues,
-      ...(launchDeferredForWave16
-        ? ["Real Castform launch is deferred to Wave 17; Wave 16 only generates the RAG project."]
-        : []),
-      ...(!config.realRunsEnabled ? ["CASTFORM_REAL_RUNS_ENABLED is not true."] : []),
-      ...(!config.hasApiKey ? ["CASTFORM_API_KEY is not configured."] : []),
-    ]
+    const blockers = realRunBlockers(readiness, config)
 
     if (blockers.length > 0) {
       const blockedRun = {
@@ -565,65 +601,35 @@ export async function createCastformRun(projectId: string, mode: CastformRunMode
       return blockedRun
     }
 
-    try {
-      const result = await callPythonRunner(projectId, "launch")
-      const realRun: CastformRun = {
-        ...run,
-        status: result.status,
-        progress: result.status === "complete" ? 100 : 30,
-        castformRunId: result.castformRunId,
-        statusUrl: result.statusUrl,
-        modelEndpoint: result.modelEndpoint,
-        error: result.error,
-      }
-      await appendRun(realRun)
-      if (realRun.status === "complete" && realRun.castformRunId) {
-        await ensureHostedModelVersion(realRun, result.modelName)
-      }
-      await appendProviderLog({
-        projectId,
-        runId: realRun.id,
-        mode,
-        operation: "create_run",
-        status: result.status === "failed" ? "failed" : "success",
-        message: result.error ?? `Real Castform run created with status ${result.status}.`,
-      })
-      await appendSupabaseTrainingEvent({
-        projectId,
-        runId: realRun.id,
-        eventType: "castform_run_created",
-        message: result.error ?? `Real Castform run created with status ${result.status}.`,
-        payload: {
-          castformRunId: realRun.castformRunId,
-          statusUrl: realRun.statusUrl,
-        },
-      })
-      return realRun
-    } catch (error) {
-      const failedRun: CastformRun = {
-        ...run,
-        status: "failed",
-        progress: 0,
-        error: error instanceof Error ? error.message : "Unknown Castform launch error.",
-      }
-      await appendRun(failedRun)
-      await appendProviderLog({
-        projectId,
-        runId: failedRun.id,
-        mode,
-        operation: "create_run",
-        status: "failed",
-        message: failedRun.error ?? "Unknown Castform launch error.",
-      })
-      await appendSupabaseTrainingEvent({
-        projectId,
-        runId: failedRun.id,
-        level: "error",
-        eventType: "castform_run_failed",
-        message: failedRun.error ?? "Unknown Castform launch error.",
-      })
-      return failedRun
+    const queuedRun: CastformRun = {
+      ...run,
+      status: "queued",
+      progress: 5,
     }
+    await appendRun(queuedRun)
+    const job = await enqueueCastformTrainJob(projectId, { runId: queuedRun.id })
+    const queuedRunWithJob: CastformRun = {
+      ...queuedRun,
+      providerJobId: job.id,
+      updatedAt: now(),
+    }
+    await appendRun(queuedRunWithJob)
+    await appendProviderLog({
+      projectId,
+      runId: queuedRun.id,
+      mode,
+      operation: "enqueue_run",
+      status: "success",
+      message: `Real Castform training job ${job.id} queued.`,
+    })
+    await appendSupabaseTrainingEvent({
+      projectId,
+      jobId: job.id,
+      runId: queuedRun.id,
+      eventType: "castform_train_job_queued",
+      message: `Real Castform training job ${job.id} queued.`,
+    })
+    return queuedRunWithJob
   }
 
   await appendRun(run)
@@ -660,7 +666,6 @@ export async function maybeAutoLaunchCastformRun(projectId: string) {
   }
 
   if (
-    launchDeferredForWave16 ||
     !state.config.autoLaunchEnabled ||
     !state.config.realRunsEnabled ||
     !state.config.hasApiKey ||
@@ -670,6 +675,204 @@ export async function maybeAutoLaunchCastformRun(projectId: string) {
   }
 
   return createCastformRun(projectId, "real")
+}
+
+export async function executeCastformTrainingJob(
+  projectId: string,
+  runId: string,
+  job?: BuildJob & { kind?: "castform_train" }
+) {
+  const runs = await readRuns(projectId)
+  const current = runs.findLast((run) => run.id === runId)
+
+  if (!current) {
+    throw new Error(`Castform run ${runId} was not found.`)
+  }
+
+  if (current.mode !== "real") {
+    throw new Error(`Castform run ${runId} is not a real training run.`)
+  }
+
+  const baseRun = current
+  const readiness = await computeTrainingReadiness(projectId)
+  const blockers = realRunBlockers(readiness)
+
+  if (blockers.length > 0) {
+    const blockedRun: CastformRun = {
+      ...baseRun,
+      status: "blocked",
+      readiness,
+      progress: 0,
+      updatedAt: now(),
+      error: blockers.join(" "),
+      providerJobId: job?.id ?? current.providerJobId,
+    }
+    await appendRun(blockedRun)
+    await appendStatusHistory(blockedRun, { phase: "blocked", jobId: job?.id })
+    await appendProviderLog({
+      projectId,
+      runId,
+      mode: "real",
+      operation: "launch",
+      status: "blocked",
+      message: blockedRun.error ?? "Castform training blocked.",
+    })
+    return blockedRun
+  }
+
+  async function updateRunning(phase: string, progress: number) {
+    const runningRun: CastformRun = {
+      ...baseRun,
+      status: "running",
+      readiness,
+      progress,
+      updatedAt: now(),
+      providerJobId: job?.id ?? baseRun.providerJobId,
+    }
+    await appendRun(runningRun)
+    await appendStatusHistory(runningRun, { phase, jobId: job?.id })
+    if (job) {
+      await updateAnyJob({
+        ...job,
+        status: "running",
+        currentStep: phase,
+        progress,
+        updatedAt: now(),
+      })
+    }
+    return runningRun
+  }
+
+  try {
+    await updateRunning("castform_preflight", 15)
+    const preflight = await callPythonRunner(projectId, "preflight", baseRun)
+    if (preflight.status === "failed") {
+      throw new Error(preflight.error ?? "Castform preflight failed.")
+    }
+    await appendProviderLog({
+      projectId,
+      runId,
+      mode: "real",
+      operation: "preflight",
+      status: "success",
+      message: "Castform Python runtime and workspace preflight passed.",
+    })
+
+    await updateRunning("castform_validate", 35)
+    const validation = await callPythonRunner(projectId, "validate", baseRun)
+    const validationReport: CastformValidationReport = {
+      status: validation.status === "failed" ? "failed" : "passed",
+      checkedAt: now(),
+      workspace: "castform_project",
+      trainRows: validation.trainRows ?? 0,
+      evalRows: validation.evalRows ?? 0,
+      corpusChunks: validation.corpusChunks ?? 0,
+      warnings: validation.warnings ?? [],
+      errors: validation.errors ?? (validation.error ? [validation.error] : []),
+    }
+    await writeArtifactJson(projectId, "castform/validation_report.json", validationReport)
+    await appendProviderLog({
+      projectId,
+      runId,
+      mode: "real",
+      operation: "validate",
+      status: validationReport.status === "failed" ? "failed" : "success",
+      message:
+        validationReport.status === "failed"
+          ? validationReport.errors.join(" ") || "Castform validation failed."
+          : "Castform validation passed.",
+    })
+    if (validationReport.status === "failed") {
+      throw new Error(validationReport.errors.join(" ") || "Castform validation failed.")
+    }
+
+    await updateRunning("castform_launch", 65)
+    const result = await callPythonRunner(projectId, "launch", baseRun)
+    if (result.status === "failed") {
+      throw new Error(result.error ?? "Castform launch failed.")
+    }
+
+    await writeArtifactJson(projectId, "castform/launch_config.json", {
+      createdAt: now(),
+      baseModel: realConfig().baseModel,
+      modelName: result.modelName,
+      modelEndpoint: result.modelEndpoint,
+      castformRunId: result.castformRunId,
+      statusUrl: result.statusUrl,
+      launchConfig: result.launchConfig ?? {},
+    })
+
+    const launchedRun: CastformRun = {
+      ...baseRun,
+      status: result.status === "complete" ? "complete" : "running",
+      readiness,
+      progress: result.status === "complete" ? 100 : 75,
+      updatedAt: now(),
+      castformRunId: result.castformRunId,
+      statusUrl: result.statusUrl,
+      modelEndpoint: result.modelEndpoint,
+      modelName: result.modelName,
+      validationReportPath: "castform/validation_report.json",
+      launchConfigPath: "castform/launch_config.json",
+      providerJobId: job?.id ?? baseRun.providerJobId,
+      error: result.error,
+    }
+    await appendRun(launchedRun)
+    await appendStatusHistory(launchedRun, { phase: "launched", jobId: job?.id })
+    if (launchedRun.status === "complete" && launchedRun.castformRunId) {
+      await ensureHostedModelVersion(launchedRun, result.modelName)
+    }
+    await appendProviderLog({
+      projectId,
+      runId,
+      mode: "real",
+      operation: "launch",
+      status: "success",
+      message: `Castform launch returned status ${launchedRun.status}.`,
+    })
+    await appendSupabaseTrainingEvent({
+      projectId,
+      jobId: job?.id,
+      runId,
+      eventType: "castform_run_launched",
+      message: `Castform launch returned status ${launchedRun.status}.`,
+      payload: {
+        castformRunId: launchedRun.castformRunId,
+        statusUrl: launchedRun.statusUrl,
+        modelName: launchedRun.modelName,
+      },
+    })
+    return launchedRun
+  } catch (error) {
+    const failedRun: CastformRun = {
+      ...baseRun,
+      status: "failed",
+      readiness,
+      progress: baseRun.progress,
+      updatedAt: now(),
+      providerJobId: job?.id ?? baseRun.providerJobId,
+      error: error instanceof Error ? error.message : "Unknown Castform training error.",
+    }
+    await appendRun(failedRun)
+    await appendStatusHistory(failedRun, { phase: "failed", jobId: job?.id })
+    await appendProviderLog({
+      projectId,
+      runId,
+      mode: "real",
+      operation: "launch",
+      status: "failed",
+      message: failedRun.error ?? "Unknown Castform training error.",
+    })
+    await appendSupabaseTrainingEvent({
+      projectId,
+      jobId: job?.id,
+      runId,
+      level: "error",
+      eventType: "castform_run_failed",
+      message: failedRun.error ?? "Unknown Castform training error.",
+    })
+    return failedRun
+  }
 }
 
 export async function refreshCastformRun(projectId: string, runId: string) {
@@ -714,14 +917,35 @@ export async function refreshCastformRun(projectId: string, runId: string) {
     return nextRun
   }
 
-  try {
-    const result = await callPythonRunner(projectId, "status", current)
+  if (!current.castformRunId) {
     const nextRun: CastformRun = {
       ...current,
-      status: result.status,
       updatedAt: refreshedAt,
       readiness,
-      progress: result.status === "complete" ? 100 : 55,
+      refreshCount: current.refreshCount + 1,
+      error: current.error ?? "Castform run is still queued locally and has not launched yet.",
+    }
+    await appendRun(nextRun)
+    await appendProviderLog({
+      projectId,
+      runId,
+      mode: "real",
+      operation: "refresh_run",
+      status: "blocked",
+      message: nextRun.error ?? "Castform run is not launched yet.",
+    })
+    return nextRun
+  }
+
+  try {
+    const result = await callPythonRunner(projectId, "status", current)
+    const status = toRunStatus(result.status)
+    const nextRun: CastformRun = {
+      ...current,
+      status,
+      updatedAt: refreshedAt,
+      readiness,
+      progress: status === "complete" ? 100 : 55,
       refreshCount: current.refreshCount + 1,
       castformRunId: result.castformRunId ?? current.castformRunId,
       statusUrl: result.statusUrl ?? current.statusUrl,
@@ -737,8 +961,8 @@ export async function refreshCastformRun(projectId: string, runId: string) {
       runId,
       mode: "real",
       operation: "refresh_run",
-      status: result.status === "failed" ? "failed" : "success",
-      message: result.error ?? `Real Castform run refreshed to ${result.status}.`,
+      status: status === "failed" ? "failed" : "success",
+      message: result.error ?? `Real Castform run refreshed to ${status}.`,
     })
     return nextRun
   } catch (error) {
