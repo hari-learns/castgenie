@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import importlib
 import importlib.util
 import json
 import os
@@ -91,17 +92,25 @@ def import_benchmax() -> tuple[Any, Any]:
     return TrainerClient, upload_training_run
 
 
-def import_workspace_env(workspace: Path) -> type[Any]:
-    run_path = workspace / "run.py"
+def import_workspace_modules(workspace: Path) -> tuple[type[Any], list[Any]]:
     sys.path.insert(0, str(workspace))
-    spec = importlib.util.spec_from_file_location("castgenie_generated_run", run_path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError("Unable to import generated Castform run.py")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    env_class = getattr(module, "Env", None) or getattr(module, "CastGenieRagEnv", None)
+    run_module = importlib.import_module("run")
+    env_class = getattr(run_module, "Env", None) or getattr(run_module, "CastGenieRagEnv", None)
     if env_class is None:
         raise RuntimeError("Generated run.py must export Env or CastGenieRagEnv")
+    local_modules = [
+        run_module,
+        importlib.import_module("src.env"),
+        importlib.import_module("src.dataset"),
+        importlib.import_module("src.tools"),
+        importlib.import_module("src.rewards"),
+        importlib.import_module("src.train"),
+    ]
+    return env_class, local_modules
+
+
+def import_workspace_env(workspace: Path) -> type[Any]:
+    env_class, _local_modules = import_workspace_modules(workspace)
     return env_class
 
 
@@ -198,7 +207,7 @@ def launch(args: argparse.Namespace) -> None:
         return
 
     TrainerClient, upload_training_run = import_benchmax()
-    env_class = import_workspace_env(workspace)
+    env_class, local_modules = import_workspace_modules(workspace)
     paths = require_workspace(workspace)
     train_data = normalize_dataset(read_jsonl(paths["train_dataset"]))
     eval_data = normalize_dataset(read_jsonl(paths["eval_dataset"]))
@@ -213,7 +222,7 @@ def launch(args: argparse.Namespace) -> None:
         "eval_dataset": eval_data,
         "run_name": run_name,
         "constructor_args": {},
-        "local_modules": [str(workspace / "src")],
+        "local_modules": local_modules,
         **kwargs,
     }
     uploaded = upload_training_run(**upload_kwargs)

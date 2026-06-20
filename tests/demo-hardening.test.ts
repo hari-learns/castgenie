@@ -71,6 +71,19 @@ describe("Wave 19 demo hardening", () => {
     expect(source).toContain("sebi.gov.in")
   })
 
+  it("defaults software-product prompts to curated public documentation domains", async () => {
+    const source = await readFile(
+      path.join(process.cwd(), "src/server/sources/web-discovery.ts"),
+      "utf8"
+    )
+
+    expect(source).toContain("docs.github.com")
+    expect(source).toContain("nextjs.org")
+    expect(source).toContain("supabase.com")
+    expect(source).toContain("developer.mozilla.org")
+    expect(source).toContain("product blueprint")
+  })
+
   it("writes a redacted demo report with source, corpus, Castform, and provider proof", async () => {
     await createProject({
       id: projectId,

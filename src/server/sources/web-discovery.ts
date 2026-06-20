@@ -58,6 +58,28 @@ function inferredAllowedDomains(input: WebDiscoveryInput) {
     return ["sebi.gov.in"]
   }
 
+  if (
+    prompt.includes("founder") ||
+    prompt.includes("startup") ||
+    prompt.includes("software product") ||
+    prompt.includes("product blueprint") ||
+    prompt.includes("cto") ||
+    prompt.includes("architecture") ||
+    prompt.includes("api endpoint") ||
+    prompt.includes("data model") ||
+    prompt.includes("developer") ||
+    prompt.includes("coding agent")
+  ) {
+    return [
+      "docs.github.com",
+      "nextjs.org",
+      "vercel.com",
+      "supabase.com",
+      "developer.mozilla.org",
+      "owasp.org",
+    ]
+  }
+
   return []
 }
 
@@ -74,6 +96,12 @@ function needsFullTextContent(prompt: string) {
     "law",
     "legal",
     "statute",
+    "architecture",
+    "api",
+    "data model",
+    "developer",
+    "software",
+    "product blueprint",
   ].some((term) => normalized.includes(term))
 }
 
@@ -153,6 +181,21 @@ function queryPlan(input: WebDiscoveryInput): WebSearchPlan {
                 `${input.prompt} official regulator guidance`,
                 `${input.prompt} compliance policy framework official`,
                 `${input.prompt} regulatory checklist official source`,
+              ]
+          : prompt.includes("founder") ||
+              prompt.includes("startup") ||
+              prompt.includes("software product") ||
+              prompt.includes("product blueprint") ||
+              prompt.includes("cto") ||
+              prompt.includes("architecture") ||
+              prompt.includes("api endpoint") ||
+              prompt.includes("data model") ||
+              prompt.includes("developer") ||
+              prompt.includes("coding agent")
+            ? [
+                "official software architecture documentation API design data model MVP security",
+                "official developer documentation application architecture API routes database auth security",
+                "official startup software product architecture checklist developer documentation",
               ]
         : [
             `${input.prompt} official guide`,

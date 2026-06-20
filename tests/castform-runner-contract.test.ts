@@ -26,4 +26,12 @@ describe("Castform Python runner contract", () => {
     expect(importFunctionIndex).toBeGreaterThan(0)
     expect(benchmaxImportIndex).toBeGreaterThan(importFunctionIndex)
   })
+
+  it("passes generated Python module objects to Castform local_modules", async () => {
+    const script = await readFile(path.join(root, "scripts/castform_runner.py"), "utf8")
+
+    expect(script).toContain("def import_workspace_modules")
+    expect(script).toContain('"local_modules": local_modules')
+    expect(script).not.toContain('"local_modules": [str(')
+  })
 })

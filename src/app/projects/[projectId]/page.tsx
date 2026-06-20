@@ -13,6 +13,7 @@ import { StatusBadge } from "@/components/app/status-badge"
 import { ArtifactBrowser } from "@/components/projects/artifact-browser"
 import { CastformRunsPanel } from "@/components/projects/castform-runs-panel"
 import { ModelLifecycleCard } from "@/components/projects/model-lifecycle-card"
+import { ProjectLoadingOverlay } from "@/components/projects/project-loading-overlay"
 import { ProjectAssistant } from "@/components/projects/project-assistant"
 import { ProjectSourceManager } from "@/components/projects/project-source-manager"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -201,6 +202,12 @@ export default async function ProjectPage({ params, searchParams }: ProjectPageP
       sidebarSectionTitle={project.name}
       sidebarSectionLinks={sidebarSectionLinks}
     >
+      <ProjectLoadingOverlay
+        projectId={project.id}
+        initialJob={buildJob}
+        lifecycleLabel={lifecycle.label}
+        lifecycleDetail={lifecycle.detail}
+      />
       <PageHeader
         title={project.name}
         description={project.prompt}
